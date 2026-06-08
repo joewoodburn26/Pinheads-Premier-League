@@ -7,6 +7,7 @@ import type { Season, Team } from "@/lib/types";
 const nav = [
   ["Standings", "/standings"],
   ["Schedule", "/schedule"],
+  ["Rosters", "/rosters"]
   ["Draft", "/draft"],
   ["Type Chart", "/type-chart"],
   ["Calculator", "/damage-calculator"],
