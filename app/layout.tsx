@@ -1,26 +1,41 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Bebas_Neue, Exo_2 } from "next/font/google";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
-import { getActiveSeason, getSeasons, getTeams } from "@/lib/data";
+import { getTeams, getSeasons, getActiveSeason } from "@/lib/data";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const bebasNeue = Bebas_Neue({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-heading",
+  display: "swap",
+});
+
+const exo2 = Exo_2({
+  subsets: ["latin"],
+  variable: "--font-body",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Pinheads Draft",
-  description: "Pokemon Draft League management for the Pinheads league."
+  description: "Pokemon Draft League management for the Pinheads league.",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const [seasons, activeSeason] = await Promise.all([getSeasons(), getActiveSeason()]);
-  const teams = await getTeams(activeSeason?.id);
+  const [seasons, activeSeason, teams] = await Promise.all([
+    getSeasons(),
+    getActiveSeason(),
+    getTeams(),
+  ]);
 
   return (
-    <html lang="en" className="dark">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+    <html lang="en" className={`${bebasNeue.variable} ${exo2.variable}`}>
+      <body className="font-body min-h-screen bg-background text-foreground antialiased">
         <SiteHeader seasons={seasons} activeSeason={activeSeason} teams={teams} />
-        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        <main className="mx-auto max-w-screen-2xl px-4 py-8 sm:px-6 lg:px-8">
+          {children}
+        </main>
       </body>
     </html>
   );
