@@ -15,9 +15,10 @@ const STAT_LABELS: { key: keyof Pick<Pokemon, "hp" | "attack" | "defense" | "spe
 
 function statColor(value: number): string {
   if (value >= 150) return "bg-blue-500";
-  if (value >= 120) return "bg-green-500";
-  if (value >= 90)  return "bg-yellow-400";
-  if (value >= 60)  return "bg-orange-400";
+  if (value >= 120) return "bg-green-700";
+  if (value >= 90)  return "bg-green-500";
+  if (value >= 60)  return "bg-yellow-400";
+  if (value >= 30)  return "bg-orange-400";
   return "bg-red-500";
 }
 
