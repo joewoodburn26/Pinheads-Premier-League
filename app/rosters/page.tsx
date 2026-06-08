@@ -4,18 +4,16 @@ import { TypeBadge } from "@/components/type-badge";
 import { pokemonTypesFor } from "@/lib/type-chart";
 import type { Pokemon } from "@/lib/types";
 
-// ─── Small inline Pokémon cell ──────────────────────────────────────────────
-
 function PokemonSlot({ pokemon }: { pokemon: Pokemon }) {
   const types = pokemonTypesFor(pokemon);
   return (
-    <div className="flex flex-col items-center gap-1 rounded-lg border bg-card p-2 text-center">
+    <div className="flex flex-col items-center gap-1 rounded-lg border bg-card p-2 text-center h-full">
       <Image
         src={pokemon.spriteUrl}
         alt={pokemon.name}
-        width={64}
-        height={64}
-        className="size-14 object-contain"
+        width={72}
+        height={72}
+        className="size-16 object-contain"
       />
       <p className="text-xs font-semibold leading-tight">{pokemon.name}</p>
       <div className="flex flex-wrap justify-center gap-0.5">
@@ -23,26 +21,26 @@ function PokemonSlot({ pokemon }: { pokemon: Pokemon }) {
           <TypeBadge key={t} type={t} />
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">{pokemon.pointValue} pts</p>
+      {/* Points pinned to the bottom */}
+      <p className="mt-auto pt-2 text-base font-black text-foreground">
+        {pokemon.pointValue} pts
+      </p>
     </div>
   );
 }
 
 function EmptySlot() {
   return (
-    <div className="flex h-full min-h-[120px] items-center justify-center rounded-lg border border-dashed bg-muted/40 text-xs text-muted-foreground">
+    <div className="flex h-full min-h-[140px] items-center justify-center rounded-lg border border-dashed bg-muted/40 text-xs text-muted-foreground">
       Empty
     </div>
   );
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
-
 export default async function RostersPage() {
   const season = await getActiveSeason();
   const teams = await getTeams(season.id);
 
-  // Fetch all rosters in parallel
   const rostersRaw = await Promise.all(teams.map((team) => getRoster(team.id)));
 
   const rosters = teams.map((team, i) => ({
@@ -51,14 +49,14 @@ export default async function RostersPage() {
   }));
 
   return (
-    <div className="space-y-10">
+    // max-w-screen-2xl widens the page; px reduces side padding
+    <div className="space-y-10 max-w-screen-2xl mx-auto px-2">
       <div>
         <h1 className="text-4xl font-black">Rosters</h1>
         <p className="mt-1 text-muted-foreground">{season.name} · all team rosters</p>
       </div>
 
       {rosters.map(({ team, slots }) => {
-        // Pad to 10 slots so the grid is always full
         const padded = Array.from({ length: 10 }, (_, i) => slots[i] ?? null);
 
         return (
