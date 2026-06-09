@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { TypeBadge } from "@/components/type-badge";
 import { Card } from "@/components/ui/card";
-import { multiplier, offenseProfile, pokemonTypes } from "@/lib/type-chart";
+import { multiplier, pokemonTypes } from "@/lib/type-chart";
 import type { PokemonType } from "@/lib/types";
 
 // ── Border style based on multiplier ────────────────────────────────────────
