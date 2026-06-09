@@ -3,7 +3,6 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { Search, X, LayoutList, LayoutGrid, ChevronUp, ChevronDown } from "lucide-react";
-import { PointEditor } from "@/components/point-editor";
 import { TypeBadge } from "@/components/type-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -317,7 +316,6 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
                         <p className="text-3xl font-black leading-none">{mon.pointValue}</p>
                         <p className="text-xs text-muted-foreground">pts</p>
                       </div>
-                      <PointEditor pokemonId={mon.id} value={mon.pointValue} />
                       <Button variant="secondary" disabled={builder.length >= 10 || builder.some((b) => b.id === mon.id)} onClick={() => setBuilder([...builder, mon])}>
                         Add
                       </Button>
