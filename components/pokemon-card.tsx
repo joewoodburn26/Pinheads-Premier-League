@@ -4,13 +4,40 @@ import { pokemonTypesFor } from "@/lib/type-chart";
 import { TypeBadge } from "@/components/type-badge";
 import { Card } from "@/components/ui/card";
 
-const STAT_LABELS: { key: keyof Pick<Pokemon, "hp" | "attack" | "defense" | "specialAttack" | "specialDefense" | "speed">; label: string }[] = [
-  { key: "hp",             label: "HP"      },
-  { key: "attack",         label: "Atk"     },
-  { key: "defense",        label: "Def"     },
-  { key: "specialAttack",  label: "Sp.Atk"  },
-  { key: "specialDefense", label: "Sp.Def"  },
-  { key: "speed",          label: "Speed"   },
+// ── Fetch abilities from PokéAPI ─────────────────────────────────────────────
+
+async function getAbilities(dexNumber: number): Promise<string[]> {
+  try {
+    const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${dexNumber}`, {
+      next: { revalidate: 86400 } // cache for 24 hours
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.abilities as { ability: { name: string }; is_hidden: boolean }[]).map(
+      (a) =>
+        // Convert kebab-case to Title Case: "rain-dish" → "Rain Dish"
+        a.ability.name
+          .split("-")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ")
+    );
+  } catch {
+    return [];
+  }
+}
+
+// ── Stat bar ─────────────────────────────────────────────────────────────────
+
+const STAT_LABELS: {
+  key: keyof Pick<Pokemon, "hp" | "attack" | "defense" | "specialAttack" | "specialDefense" | "speed">;
+  label: string;
+}[] = [
+  { key: "hp",             label: "HP"     },
+  { key: "attack",         label: "Atk"    },
+  { key: "defense",        label: "Def"    },
+  { key: "specialAttack",  label: "Sp.Atk" },
+  { key: "specialDefense", label: "Sp.Def" },
+  { key: "speed",          label: "Speed"  },
 ];
 
 function statColor(value: number): string {
@@ -23,7 +50,6 @@ function statColor(value: number): string {
 }
 
 function StatBar({ label, value }: { label: string; value: number }) {
-  // Max stat in the game is ~255 (HP of Blissey). We cap the bar at 255.
   const pct = Math.min(100, Math.round((value / 255) * 100));
   return (
     <div className="flex items-center gap-2 text-xs">
@@ -39,8 +65,11 @@ function StatBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-export function PokemonCard({ pokemon }: { pokemon: Pokemon }) {
+// ── Card ─────────────────────────────────────────────────────────────────────
+
+export async function PokemonCard({ pokemon }: { pokemon: Pokemon }) {
   const types = pokemonTypesFor(pokemon);
+  const abilities = await getAbilities(pokemon.dexNumber);
 
   return (
     <Card className="p-4">
@@ -62,6 +91,15 @@ export function PokemonCard({ pokemon }: { pokemon: Pokemon }) {
               <TypeBadge key={type} type={type} />
             ))}
           </div>
+          {/* Abilities */}
+          {abilities.length > 0 && (
+            <div className="mt-2">
+              <p className="text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">Abilities: </span>
+                {abilities.join(" · ")}
+              </p>
+            </div>
+          )}
         </div>
       </div>
       <div className="mt-4 space-y-1.5">
