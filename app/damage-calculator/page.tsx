@@ -27,3 +27,4 @@ export default async function DamageCalculatorPage() {
       <DamageCalculator pokemon={pokemon} teams={teams} rosters={rosters} />
     </div>
   );
+}
