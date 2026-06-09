@@ -9,17 +9,15 @@ import { Card } from "@/components/ui/card";
 async function getAbilities(dexNumber: number): Promise<string[]> {
   try {
     const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${dexNumber}`, {
-      next: { revalidate: 86400 } // cache for 24 hours
+      next: { revalidate: 86400 }
     });
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.abilities as { ability: { name: string }; is_hidden: boolean }[]).map(
-      (a) =>
-        // Convert kebab-case to Title Case: "rain-dish" → "Rain Dish"
-        a.ability.name
-          .split("-")
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(" ")
+    return (data.abilities as { ability: { name: string } }[]).map((a) =>
+      a.ability.name
+        .split("-")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ")
     );
   } catch {
     return [];
@@ -73,35 +71,45 @@ export async function PokemonCard({ pokemon }: { pokemon: Pokemon }) {
 
   return (
     <Card className="p-4">
+      {/* Top section: sprite (red) | info (blue) | points (green) */}
       <div className="flex items-start gap-4">
-        <Image
-          src={pokemon.spriteUrl}
-          alt={pokemon.name}
-          width={90}
-          height={90}
-          className="size-20 object-contain"
-        />
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate text-lg font-bold">{pokemon.name}</h3>
-          <p className="text-sm text-muted-foreground">
-            {pokemon.pointValue} pts · BST {pokemon.bst}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1">
+
+        {/* RED box: large sprite */}
+        <div className="shrink-0">
+          <Image
+            src={pokemon.spriteUrl}
+            alt={pokemon.name}
+            width={120}
+            height={120}
+            className="size-28 object-contain"
+          />
+        </div>
+
+        {/* BLUE box: name → types → abilities, top to bottom */}
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <h3 className="text-xl font-bold leading-tight">{pokemon.name}</h3>
+          <div className="flex flex-wrap gap-1">
             {types.map((type) => (
               <TypeBadge key={type} type={type} />
             ))}
           </div>
-          {/* Abilities */}
           {abilities.length > 0 && (
-            <div className="mt-2">
-              <p className="text-xs text-muted-foreground">
-                <span className="font-semibold text-foreground">Abilities: </span>
-                {abilities.join(" · ")}
-              </p>
-            </div>
+            <p className="text-sm font-medium text-foreground">
+              {abilities.join(" · ")}
+            </p>
           )}
         </div>
+
+        {/* GREEN box: point value, top-right, large and bold */}
+        <div className="shrink-0 text-right">
+          <p className="text-3xl font-black leading-none">{pokemon.pointValue}</p>
+          <p className="text-xs text-muted-foreground">pts</p>
+          <p className="mt-1 text-xs text-muted-foreground">BST {pokemon.bst}</p>
+        </div>
+
       </div>
+
+      {/* Stat bars */}
       <div className="mt-4 space-y-1.5">
         {STAT_LABELS.map(({ key, label }) => (
           <StatBar key={key} label={label} value={pokemon[key]} />
