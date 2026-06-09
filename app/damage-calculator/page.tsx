@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TypeBadge } from "@/components/type-badge";
 import { multiplier, pokemonTypesFor } from "@/lib/type-chart";
-import type { Pokemon, PokemonType, Team, TeamPokemon } from "@/lib/types";
+import type { Pokemon, PokemonType, Team } from "@/lib/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
