@@ -71,10 +71,10 @@ export async function PokemonCard({ pokemon }: { pokemon: Pokemon }) {
 
   return (
     <Card className="p-4">
-      {/* Top section: sprite (red) | info (blue) | points (green) */}
+      {/* Top section: sprite | info | points */}
       <div className="flex items-start gap-4">
 
-        {/* RED box: large sprite */}
+        {/* Large sprite */}
         <div className="shrink-0">
           <Image
             src={pokemon.spriteUrl}
@@ -85,7 +85,7 @@ export async function PokemonCard({ pokemon }: { pokemon: Pokemon }) {
           />
         </div>
 
-        {/* BLUE box: name → types → abilities, top to bottom */}
+        {/* Name → types → abilities */}
         <div className="min-w-0 flex-1 space-y-1.5">
           <h3 className="text-xl font-bold leading-tight">{pokemon.name}</h3>
           <div className="flex flex-wrap gap-1">
@@ -100,11 +100,10 @@ export async function PokemonCard({ pokemon }: { pokemon: Pokemon }) {
           )}
         </div>
 
-        {/* GREEN box: point value, top-right, large and bold */}
+        {/* Point value top-right */}
         <div className="shrink-0 text-right">
           <p className="text-3xl font-black leading-none">{pokemon.pointValue}</p>
           <p className="text-xs text-muted-foreground">pts</p>
-          <p className="mt-1 text-xs text-muted-foreground">BST {pokemon.bst}</p>
         </div>
 
       </div>
@@ -114,6 +113,18 @@ export async function PokemonCard({ pokemon }: { pokemon: Pokemon }) {
         {STAT_LABELS.map(({ key, label }) => (
           <StatBar key={key} label={label} value={pokemon[key]} />
         ))}
+
+        {/* BST total row — like Excel SUM */}
+        <div className="flex items-center gap-2 border-t pt-1.5 text-xs">
+          <span className="w-12 shrink-0 text-right font-semibold text-foreground">BST</span>
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary/60"
+              style={{ width: `${Math.min(100, Math.round((pokemon.bst / 720) * 100))}%` }}
+            />
+          </div>
+          <span className="w-8 shrink-0 font-mono font-black">{pokemon.bst}</span>
+        </div>
       </div>
     </Card>
   );
