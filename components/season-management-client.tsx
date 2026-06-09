@@ -72,7 +72,6 @@ export function SeasonManagementClient({ seasons }: { seasons: Season[] }) {
   const [copyRosters, setCopyRosters] = useState(false);
   const [copyLogos, setCopyLogos]   = useState(false);
 
-  const activeSeason = seasons.find((s) => s.activeSeason);
   const nonArchived  = seasons.filter((s) => !s.archived);
   const archived     = seasons.filter((s) => s.archived);
 

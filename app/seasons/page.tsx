@@ -1,5 +1,4 @@
 import { getSeasons } from "@/lib/data";
-import { winPct } from "@/lib/utils";
 
 export default async function SeasonsPage() {
   const seasons = await getSeasons();

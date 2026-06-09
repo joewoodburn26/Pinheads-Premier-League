@@ -29,7 +29,7 @@ export async function createNewSeason(formData: FormData) {
   if (seasonErr || !season) return { ok: false, error: seasonErr?.message };
 
   // Get source teams if copying
-  let sourceTeams: any[] = [];
+  let sourceTeams: { id: string; coach_id: string; team_name: string; logo_url: string | null; coach?: { name: string } | null }[] = [];
   if (sourceId && (copyNames || copyCoaches || copyLogos || copyRosters)) {
     const { data } = await supabase.from("teams").select("*, coach:coaches(*)").eq("season_id", sourceId);
     sourceTeams = data ?? [];
