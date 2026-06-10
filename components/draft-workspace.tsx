@@ -362,7 +362,7 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
             {tierGroups.map(([pts, mons]) => (
               <div key={pts}>
                 {/* Sticky tier header — top-[121px] accounts for nav (~57px) + filter bar (~64px) */}
-                <div className="sticky top-[121px] z-20 flex items-center gap-3 border-b border-t bg-background/95 backdrop-blur px-2 py-2">
+                <div className="sticky top-[90px] z-20 flex items-center gap-3 border-b border-t bg-background/95 backdrop-blur px-2 py-2">
                   <span className="text-2xl font-black">{pts}</span>
                   <span className="text-sm font-semibold text-muted-foreground">pts</span>
                   <span className="ml-auto text-xs text-muted-foreground">{mons.length} Pokémon</span>
@@ -393,7 +393,7 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
 
       {/* ── TEAM BUILDER SIDEBAR — sticky ── */}
       <aside className="space-y-4">
-        <div className="sticky top-[73px] space-y-4">
+        <div className="sticky top-[100px] space-y-4">
           <Card className="p-4">
             <h2 className="text-xl font-black">Team Builder</h2>
             <p className="text-sm text-muted-foreground">Client-side only. Not saved.</p>
