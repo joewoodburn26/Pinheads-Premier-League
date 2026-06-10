@@ -209,7 +209,6 @@ function getAttackerAbilityMod(
 function getDefenderAbilityMod(
   ability: string,
   move: Move,
-  _weather: Weather
 ): number {
   const a = ability.toLowerCase();
   const mt = move.type;
