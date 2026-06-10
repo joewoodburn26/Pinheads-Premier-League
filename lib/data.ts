@@ -75,7 +75,7 @@ export async function getPokemon() {
 export async function getRoster(teamId: string) {
   if (!hasSupabaseEnv()) return teamPokemon.filter((slot) => slot.teamId === teamId);
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.from("team_pokemon").select("*, pokemon(*)").eq("team_id", teamId);
+  const { data } = await supabase.from("team_pokemon").select("*, pokemon(*)").eq("team_id", teamId).order("slot_order", { ascending: true });
   return (data ?? []).map((row) => ({
     id: row.id,
     seasonId: row.season_id,

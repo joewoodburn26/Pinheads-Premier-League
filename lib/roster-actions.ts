@@ -9,8 +9,6 @@ import { teamPokemon } from "@/lib/mock-data";
 // ── Remove a Pokémon slot from a roster ──────────────────────────────────────
 export async function removeFromRoster(slotId: string) {
   if (!hasSupabaseEnv()) {
-    // Mock mode: remove from in-memory array (won't persist across reloads,
-    // but won't crash either)
     const idx = teamPokemon.findIndex((s) => s.id === slotId);
     if (idx !== -1) teamPokemon.splice(idx, 1);
     revalidatePath("/rosters");
@@ -76,11 +74,47 @@ export async function addToRoster(teamId: string, seasonId: string, pokemonId: s
   }
 
   const supabase = createSupabaseAdminClient();
+
+  // Get current max slot_order for this team
+  const { data: existing } = await supabase
+    .from("team_pokemon")
+    .select("slot_order")
+    .eq("team_id", teamId)
+    .order("slot_order", { ascending: false })
+    .limit(1);
+
+  const nextOrder = (existing?.[0]?.slot_order ?? -1) + 1;
+
   const { error } = await supabase
     .from("team_pokemon")
-    .insert({ team_id: teamId, season_id: seasonId, pokemon_id: pokemonId });
+    .insert({ team_id: teamId, season_id: seasonId, pokemon_id: pokemonId, slot_order: nextOrder });
 
   if (error) return { success: false, error: error.message };
+
+  revalidatePath("/rosters");
+  revalidatePath("/teams");
+  return { success: true };
+}
+
+// ── Reorder roster slots ──────────────────────────────────────────────────────
+// orderedIds: array of slot IDs in the new desired order
+export async function reorderRoster(orderedIds: string[]) {
+  if (!hasSupabaseEnv()) {
+    revalidatePath("/rosters");
+    return { success: true };
+  }
+
+  const supabase = createSupabaseAdminClient();
+
+  // Update each slot's slot_order to match its position in the array
+  const updates = orderedIds.map((id, index) =>
+    supabase
+      .from("team_pokemon")
+      .update({ slot_order: index })
+      .eq("id", id)
+  );
+
+  await Promise.all(updates);
 
   revalidatePath("/rosters");
   revalidatePath("/teams");
