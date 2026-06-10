@@ -352,9 +352,9 @@ function TeamBuilder({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      {/* LEFT — team list */}
-      <div className="space-y-3">
+    <div className="grid gap-4 lg:grid-cols-2 items-start">
+      {/* LEFT — team list, sticky */}
+      <div className="sticky top-[100px] space-y-3">
         <Card className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-black">Team Builder</h2>
@@ -406,28 +406,32 @@ function TeamBuilder({
             </div>
           </div>
 
-          {/* Pokémon list */}
-          <div className="space-y-2">
-            {slots.length === 0 && <p className="text-xs text-muted-foreground italic">No Pokémon added yet</p>}
+          {/* Pokémon list — 2 per row */}
+          <div className="grid grid-cols-2 gap-2">
+            {slots.length === 0 && (
+              <p className="col-span-2 text-xs text-muted-foreground italic">No Pokémon added yet</p>
+            )}
             {slots.map(({ pokemon: mon, note }) => (
               <div key={mon.id} className="rounded-lg border bg-muted/30 p-2 space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <Image src={mon.spriteUrl} alt={mon.name} width={36} height={36} className="size-8 object-contain shrink-0" />
+                <div className="flex items-center gap-1.5">
+                  <Image src={mon.spriteUrl} alt={mon.name} width={32} height={32} className="size-7 object-contain shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold truncate">{mon.name}</p>
+                    <p className="text-xs font-bold truncate">{mon.name}</p>
                     <div className="flex items-center gap-1 flex-wrap">
                       {pokemonTypesFor(mon).map(t => <TypeBadge key={t} type={t} />)}
-                      <span className="text-xs font-bold text-primary ml-auto">{mon.pointValue}pts</span>
                     </div>
                   </div>
-                  <button onClick={() => onRemove(mon.id)}
-                    className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors">
-                    <X size={14} />
-                  </button>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className="text-xs font-bold text-primary">{mon.pointValue}pts</span>
+                    <button onClick={() => onRemove(mon.id)}
+                      className="rounded p-0.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors">
+                      <X size={12} />
+                    </button>
+                  </div>
                 </div>
                 <input
                   type="text"
-                  placeholder="Add notes (strategy, moves…)"
+                  placeholder="Notes…"
                   value={note}
                   onChange={e => onNoteChange(mon.id, e.target.value)}
                   className="w-full rounded border bg-background px-2 py-1 text-xs text-muted-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary"
@@ -438,8 +442,8 @@ function TeamBuilder({
         </Card>
       </div>
 
-      {/* RIGHT — analytics */}
-      <div className="space-y-3">
+      {/* RIGHT — analytics, sticky */}
+      <div className="sticky top-[100px] space-y-3">
         <Card className="p-4 space-y-2">
           <h3 className="font-bold text-sm">Type Coverage</h3>
           <p className="text-xs text-muted-foreground">↑ = your hits · ↓ = your weaknesses</p>
@@ -722,7 +726,7 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
 
       {/* ── TEAM BUILDER — full width, internally split ── */}
       <aside className="xl:col-span-2">
-        <div className="sticky top-[100px]">
+        <div>
           <TeamBuilder
             slots={slots}
             onRemove={id => setSlots(prev => prev.filter(s => s.pokemon.id !== id))}
