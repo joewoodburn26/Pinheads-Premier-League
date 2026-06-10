@@ -633,8 +633,8 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
   );
 
   return (
-    <div className="grid gap-6 xl:grid-cols-2">
-      <section className="space-y-4">        {/* View toggle */}
+    <div className="grid gap-6 xl:grid-cols-[1fr_1fr_1fr]">
+      <section className="space-y-4 xl:col-span-1">        {/* View toggle */}
         <div className="flex items-center gap-2">
           <button onClick={() => setView("list")}
             className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-colors ${view === "list" ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}>
@@ -724,9 +724,9 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
         )}
       </section>
 
-      {/* ── TEAM BUILDER — full width, internally split ── */}
+      {/* ── TEAM BUILDER — right side, spans 2 cols, sticky ── */}
       <aside className="xl:col-span-2">
-        <div>
+        <div className="sticky top-[100px]">
           <TeamBuilder
             slots={slots}
             onRemove={id => setSlots(prev => prev.filter(s => s.pokemon.id !== id))}
