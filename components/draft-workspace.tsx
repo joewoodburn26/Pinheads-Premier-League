@@ -633,7 +633,7 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
   );
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_1fr_1fr]">
+    <div className="grid gap-6 xl:grid-cols-[2fr_1fr_1fr]">
       <section className="space-y-4 xl:col-span-1">        {/* View toggle */}
         <div className="flex items-center gap-2">
           <button onClick={() => setView("list")}
