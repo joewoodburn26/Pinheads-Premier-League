@@ -19,11 +19,8 @@ export const metadata: Metadata = {
 function getThemeClass(pathname: string): string {
   if (pathname === "/") return "theme-home";
   if (pathname.startsWith("/settings")) return "theme-settings";
-  if (
-    pathname.startsWith("/teams") ||
-    pathname.startsWith("/rosters") ||
-    pathname.startsWith("/draft")
-  ) return "theme-league";
+  // Rosters and Draft get green/silver — but NOT /teams since those are dynamic
+  if (pathname.startsWith("/rosters") || pathname.startsWith("/draft")) return "theme-league";
   return "";
 }
 
