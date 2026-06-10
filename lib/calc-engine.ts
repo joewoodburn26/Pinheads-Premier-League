@@ -209,7 +209,7 @@ function getAttackerAbilityMod(
 function getDefenderAbilityMod(
   ability: string,
   move: Move,
-  weather: Weather
+  _weather: Weather
 ): number {
   const a = ability.toLowerCase();
   const mt = move.type;
@@ -308,13 +308,6 @@ function getAttackerItemMod(item: string, move: Move): number {
   return 1;
 }
 
-function getDefenderItemMod(item: string, move: Move): number {
-  const i = item.toLowerCase();
-  // Assault Vest handled in SpD
-  // Eviolite handled in Def/SpD
-  return 1;
-}
-
 // ─── Main damage calculator ───────────────────────────────────────────────────
 
 export function calculateDamage(
@@ -378,7 +371,7 @@ export function calculateDamage(
 
   // ── Attacker stats ────────────────────────────────────────────────────────
   let rawAtk = isPhysical ? attacker.atk : attacker.spA;
-  let rawDef = isPhysical ? defender.def : defender.spD;
+  const rawDef = isPhysical ? defender.def : defender.spD;
 
   // Huge Power / Pure Power doubles attack
   if (

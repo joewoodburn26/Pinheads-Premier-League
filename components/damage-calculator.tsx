@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useCallback, useMemo, useTransition } from "react";
-import { ChevronDown, ChevronUp, Zap, Shield, Swords } from "lucide-react";
+import { useState } from "react";
+import { Zap, Shield, Swords } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TypeBadge } from "@/components/type-badge";
@@ -35,7 +35,7 @@ async function fetchMoves(dexNumber: number): Promise<ApiMove[]> {
     // Get learnset
     const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${dexNumber}`);
     const data = await res.json();
-    const moveNames: string[] = (data.moves as any[]).map((m: any) => m.move.name);
+    const moveNames: string[] = (data.moves as { move: { name: string } }[]).map((m) => m.move.name);
 
     // Fetch move details in parallel (batch of 20 at a time)
     const details: ApiMove[] = [];
@@ -46,7 +46,14 @@ async function fetchMoves(dexNumber: number): Promise<ApiMove[]> {
         batch.map(async (name) => {
           try {
             const r = await fetch(`https://pokeapi.co/api/v2/move/${name}`);
-            const m = await r.json();
+            const m = await r.json() as {
+              name: string;
+              power: number | null;
+              damage_class?: { name: string };
+              type?: { name: string };
+              priority?: number;
+              meta?: { category?: { name?: string } };
+            };
             if (m.power === null || m.damage_class?.name === "status") return null;
             return {
               name: m.name.split("-").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
@@ -204,7 +211,6 @@ function PokemonPanel({
   isAttacker: boolean;
 }) {
   const [teamFilter, setTeamFilter] = useState("all");
-  const [abilitySearch, setAbilitySearch] = useState("");
 
   const available = teamFilter === "all" ? allPokemon : (rosters[teamFilter] ?? []);
   const p = config.pokemon;
@@ -221,10 +227,6 @@ function PokemonPanel({
     (config.status === "paralysis" ? 0.5 : 1) *
     (config.tailwind ? 2 : 1) *
     (config.item.toLowerCase() === "choice scarf" ? 1.5 : 1) : 0;
-
-  const filteredAbilities = ABILITIES.filter(a =>
-    a.toLowerCase().includes(abilitySearch.toLowerCase())
-  );
 
   async function handlePokemonChange(pokemonId: string) {
     const found = allPokemon.find(pk => pk.id === pokemonId) ?? null;
@@ -377,17 +379,15 @@ function ResultPanel({
     );
   }
 
-  const atkMoves = attacker.moves.filter(m => m.category !== "status" && m.power > 0);
-  const defMoves = defender.moves.filter(m => m.category !== "status" && m.power > 0);
-
   function renderMoveResults(moves: ApiMove[], attackerCfg: CalcPokemon, defenderCfg: CalcPokemon, label: string) {
-    if (moves.length === 0) return (
+    const damageMoves = moves.filter(m => m.category !== "status" && m.power > 0);
+    if (damageMoves.length === 0) return (
       <div className="text-xs text-muted-foreground italic">No moves loaded yet</div>
     );
     return (
       <div className="space-y-1.5">
         <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
-        {moves.slice(0, 20).map(move => {
+        {damageMoves.slice(0, 20).map(move => {
           const m: Move = {
             name: move.name,
             power: move.power ?? 0,
@@ -397,9 +397,6 @@ function ResultPanel({
             makesContact: move.makesContact,
           };
           const result = calculateDamage(attackerCfg, defenderCfg, m, field, level);
-          if (result.typeMultiplier === 0 && result.min === 0 && result.max === 0 && !result.description.includes("Status")) {
-            // Show immune moves differently
-          }
           const pctColor =
             result.minPercent >= 100 ? "text-green-400" :
             result.minPercent >= 50  ? "text-yellow-400" :
@@ -436,7 +433,6 @@ function ResultPanel({
   // Speed comparison
   const atkSpe = getEffectiveSpeed(calcAtk);
   const defSpe = getEffectiveSpeed(calcDef);
-  const speedWinner = atkSpe > defSpe ? attacker.pokemon?.name : atkSpe < defSpe ? defender.pokemon?.name : "Tie";
 
   return (
     <div className="space-y-4">
