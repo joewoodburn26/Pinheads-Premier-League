@@ -286,43 +286,63 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
         {view === "list" && (
           <>
             <div className="space-y-3">
-              {paginated.map((mon) => (
-                <Card key={mon.id} className="p-4">
-                  <div className="flex items-start gap-4">
-                    <Image src={mon.spriteUrl} alt={mon.name} width={80} height={80} className="size-20 shrink-0 object-contain" />
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-muted-foreground font-mono">#{String(mon.dexNumber).padStart(4, "0")}</span>
-                        <h3 className="text-lg font-bold">{mon.name}</h3>
-                        <div className="flex flex-wrap gap-1">
-                          {pokemonTypesFor(mon).map((t) => <TypeBadge key={t} type={t} />)}
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        {STAT_KEYS.map(({ key, label }) => (
-                          <StatBar key={key} label={label} value={mon[key]} max={255} />
-                        ))}
-                        <div className="flex items-center gap-2 border-t pt-1 text-xs">
-                          <span className="w-12 shrink-0 text-right font-semibold">BST</span>
-                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                            <div className="h-full rounded-full bg-primary/60" style={{ width: `${Math.min(100, Math.round((mon.bst / 720) * 100))}%` }} />
+              {paginated.map((mon) => {
+                const inBuilder = builder.some((b) => b.id === mon.id);
+                const canAdd = !inBuilder && builder.length < 10;
+                return (
+                  <Card
+                    key={mon.id}
+                    onClick={() => {
+                      if (inBuilder) {
+                        setBuilder(builder.filter((b) => b.id !== mon.id));
+                      } else if (canAdd) {
+                        setBuilder([...builder, mon]);
+                      }
+                    }}
+                    className={`p-4 cursor-pointer transition-all ${
+                      inBuilder
+                        ? "border-primary/60 bg-primary/5 ring-1 ring-primary/40"
+                        : canAdd
+                        ? "hover:border-primary/40 hover:bg-muted/30"
+                        : "opacity-50 cursor-not-allowed"
+                    }`}
+                  >
+                    <div className="flex items-start gap-4">
+                      <Image src={mon.spriteUrl} alt={mon.name} width={80} height={80} className="size-20 shrink-0 object-contain" />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-muted-foreground font-mono">#{String(mon.dexNumber).padStart(4, "0")}</span>
+                          <h3 className="text-lg font-bold">{mon.name}</h3>
+                          <div className="flex flex-wrap gap-1">
+                            {pokemonTypesFor(mon).map((t) => <TypeBadge key={t} type={t} />)}
                           </div>
-                          <span className="w-8 shrink-0 font-mono font-black">{mon.bst}</span>
+                          {inBuilder && (
+                            <span className="ml-auto rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
+                              ✓ Added — click to remove
+                            </span>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          {STAT_KEYS.map(({ key, label }) => (
+                            <StatBar key={key} label={label} value={mon[key]} max={255} />
+                          ))}
+                          <div className="flex items-center gap-2 border-t pt-1 text-xs">
+                            <span className="w-12 shrink-0 text-right font-semibold">BST</span>
+                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                              <div className="h-full rounded-full bg-primary/60" style={{ width: `${Math.min(100, Math.round((mon.bst / 720) * 100))}%` }} />
+                            </div>
+                            <span className="w-8 shrink-0 font-mono font-black">{mon.bst}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="shrink-0 flex flex-col items-end gap-2">
-                      <div className="text-right">
+                      <div className="shrink-0 text-right">
                         <p className="text-3xl font-black leading-none">{mon.pointValue}</p>
                         <p className="text-xs text-muted-foreground">pts</p>
                       </div>
-                      <Button variant="secondary" disabled={builder.length >= 10 || builder.some((b) => b.id === mon.id)} onClick={() => setBuilder([...builder, mon])}>
-                        Add
-                      </Button>
                     </div>
-                  </div>
-                </Card>
-              ))}
+                  </Card>
+                );
+              })}
             </div>
 
             {/* Pagination */}
@@ -341,8 +361,8 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
           <div className="space-y-0">
             {tierGroups.map(([pts, mons]) => (
               <div key={pts}>
-                {/* Sticky tier header */}
-                <div className="sticky top-[57px] z-20 flex items-center gap-3 border-b border-t bg-background/95 backdrop-blur px-2 py-2">
+                {/* Sticky tier header — top-[121px] accounts for nav (~57px) + filter bar (~64px) */}
+                <div className="sticky top-[121px] z-20 flex items-center gap-3 border-b border-t bg-background/95 backdrop-blur px-2 py-2">
                   <span className="text-2xl font-black">{pts}</span>
                   <span className="text-sm font-semibold text-muted-foreground">pts</span>
                   <span className="ml-auto text-xs text-muted-foreground">{mons.length} Pokémon</span>
@@ -356,7 +376,9 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
                       mon={mon}
                       inBuilder={builder.some((b) => b.id === mon.id)}
                       onAdd={() => {
-                        if (builder.length < 10 && !builder.some((b) => b.id === mon.id)) {
+                        if (builder.some((b) => b.id === mon.id)) {
+                          setBuilder(builder.filter((b) => b.id !== mon.id));
+                        } else if (builder.length < 10) {
                           setBuilder([...builder, mon]);
                         }
                       }}
@@ -369,38 +391,40 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
         )}
       </section>
 
-      {/* ── TEAM BUILDER SIDEBAR (shared) ── */}
+      {/* ── TEAM BUILDER SIDEBAR — sticky ── */}
       <aside className="space-y-4">
-        <Card className="p-4">
-          <h2 className="text-xl font-black">Team Builder</h2>
-          <p className="text-sm text-muted-foreground">Client-side only. Not saved.</p>
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center text-sm">
-            <div className="rounded-md bg-muted p-3"><b>{used}</b><br />Used</div>
-            <div className="rounded-md bg-muted p-3"><b>{budget - used}</b><br />Left</div>
-            <div className="rounded-md bg-muted p-3"><b>{avgBst}</b><br />Avg BST</div>
-          </div>
-          <div className="mt-4 space-y-2">
-            {builder.length === 0 && <p className="text-xs text-muted-foreground">No Pokémon added yet.</p>}
-            {builder.map((mon) => (
-              <div key={mon.id} className="flex items-center justify-between rounded-md bg-muted p-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <Image src={mon.spriteUrl} alt={mon.name} width={32} height={32} className="size-7 object-contain" />
-                  <span>{mon.name} · {mon.pointValue}pts</span>
+        <div className="sticky top-[73px] space-y-4">
+          <Card className="p-4">
+            <h2 className="text-xl font-black">Team Builder</h2>
+            <p className="text-sm text-muted-foreground">Client-side only. Not saved.</p>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center text-sm">
+              <div className="rounded-md bg-muted p-3"><b>{used}</b><br />Used</div>
+              <div className="rounded-md bg-muted p-3"><b>{budget - used}</b><br />Left</div>
+              <div className="rounded-md bg-muted p-3"><b>{avgBst}</b><br />Avg BST</div>
+            </div>
+            <div className="mt-4 space-y-2">
+              {builder.length === 0 && <p className="text-xs text-muted-foreground">No Pokémon added yet.</p>}
+              {builder.map((mon) => (
+                <div key={mon.id} className="flex items-center justify-between rounded-md bg-muted p-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Image src={mon.spriteUrl} alt={mon.name} width={32} height={32} className="size-7 object-contain" />
+                    <span>{mon.name} · {mon.pointValue}pts</span>
+                  </div>
+                  <button onClick={() => setBuilder(builder.filter((b) => b.id !== mon.id))}><X size={16} /></button>
                 </div>
-                <button onClick={() => setBuilder(builder.filter((b) => b.id !== mon.id))}><X size={16} /></button>
-              </div>
-            ))}
-          </div>
-        </Card>
+              ))}
+            </div>
+          </Card>
 
-        <Card className="space-y-3 p-4">
-          <h3 className="font-bold">Type Distribution</h3>
-          <p className="text-sm text-muted-foreground">{typeDist.map((r) => `${r.type} ×${r.count}`).join(" · ") || "No Pokémon selected"}</p>
-          <h3 className="font-bold">Weakness Summary</h3>
-          <p className="text-sm text-muted-foreground">{weaknesses.slice(0, 8).map((r) => `${r.type} ×${r.count}`).join(" · ") || "No weaknesses yet"}</p>
-          <h3 className="font-bold">Speed Tiers</h3>
-          <p className="text-sm text-muted-foreground">{speeds.map((m) => `${m.name} ${m.speed}`).join(" · ") || "No Pokémon selected"}</p>
-        </Card>
+          <Card className="space-y-3 p-4">
+            <h3 className="font-bold">Type Distribution</h3>
+            <p className="text-sm text-muted-foreground">{typeDist.map((r) => `${r.type} ×${r.count}`).join(" · ") || "No Pokémon selected"}</p>
+            <h3 className="font-bold">Weakness Summary</h3>
+            <p className="text-sm text-muted-foreground">{weaknesses.slice(0, 8).map((r) => `${r.type} ×${r.count}`).join(" · ") || "No weaknesses yet"}</p>
+            <h3 className="font-bold">Speed Tiers</h3>
+            <p className="text-sm text-muted-foreground">{speeds.map((m) => `${m.name} ${m.speed}`).join(" · ") || "No Pokémon selected"}</p>
+          </Card>
+        </div>
       </aside>
     </div>
   );
