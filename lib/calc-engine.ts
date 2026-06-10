@@ -228,7 +228,7 @@ function getAttackerAbilityMod(
 // ─── Defender ability modifiers ───────────────────────────────────────────────
 
 function getDefenderAbilityMod(
-  ability: string, move: Move, _weather: Weather
+  ability: string, move: Move
 ): number {
   const a = ability.toLowerCase();
   const mt = move.type;
@@ -357,7 +357,7 @@ export function calculateDamage(
   }
 
   // ── Defender ability immunity ─────────────────────────────────────────────
-  const defAbilMod = getDefenderAbilityMod(defender.ability, move, field.weather);
+  const defAbilMod = getDefenderAbilityMod(defender.ability, move);
   if (defAbilMod === 0) {
     return {
       rolls: [0], min: 0, max: 0, minPercent: 0, maxPercent: 0,
