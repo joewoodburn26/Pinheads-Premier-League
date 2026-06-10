@@ -43,15 +43,11 @@ async function fetchPokemonData(dexNumber: number): Promise<PokemonApiData> {
       abilities: { ability: { name: string }; is_hidden: boolean }[];
     };
 
-    // Abilities — format to Title Case
     const abilities = ["None", ...data.abilities.map(a =>
       a.ability.name.split("-").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
     )];
 
-    // Move names
     const moveNames = data.moves.map(m => m.move.name);
-
-    // Fetch move details in batches
     const details: ApiMove[] = [];
     const batchSize = 20;
     for (let i = 0; i < Math.min(moveNames.length, 200); i += batchSize) {
@@ -61,18 +57,15 @@ async function fetchPokemonData(dexNumber: number): Promise<PokemonApiData> {
           try {
             const r = await fetch(`https://pokeapi.co/api/v2/move/${name}`);
             const m = await r.json() as {
-              name: string;
-              power: number | null;
-              damage_class?: { name: string };
-              type?: { name: string };
-              priority?: number;
-              meta?: { category?: { name?: string } };
+              name: string; power: number | null;
+              damage_class?: { name: string }; type?: { name: string };
+              priority?: number; meta?: { category?: { name?: string } };
             };
             if (m.power === null || m.damage_class?.name === "status") return null;
             return {
               name: m.name.split("-").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
               power: m.power,
-              type: (m.type ? m.type.name.charAt(0).toUpperCase() + m.type.name.slice(1) : "Normal") as PokemonType,
+              type: (m.type ? m.type.name.charAt(0).toUpperCase() + m.type.name.slice(1) : "Normal"),
               category: m.damage_class?.name as MoveCategory,
               priority: m.priority ?? 0,
               makesContact: m.meta?.category?.name?.includes("damage") ?? false,
@@ -83,7 +76,6 @@ async function fetchPokemonData(dexNumber: number): Promise<PokemonApiData> {
       details.push(...results.filter(Boolean) as ApiMove[]);
     }
     details.sort((a, b) => a.name.localeCompare(b.name));
-
     const result: PokemonApiData = { moves: details, abilities };
     pokemonDataCache[dexNumber] = result;
     return result;
@@ -92,7 +84,12 @@ async function fetchPokemonData(dexNumber: number): Promise<PokemonApiData> {
   }
 }
 
-// ─── Config types ─────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+// A move slot: the selected move name + override fields
+interface MoveSlot {
+  moveName: string; // "" = empty slot
+}
 
 interface PokemonConfig {
   pokemon: Pokemon | null;
@@ -103,13 +100,10 @@ interface PokemonConfig {
   status: Status;
   item: string;
   ability: string;
-  reflect: boolean;
-  lightScreen: boolean;
-  auroraVeil: boolean;
-  tailwind: boolean;
-  helpingHand: boolean;
-  isCrit: boolean;
-  moves: ApiMove[];
+  reflect: boolean; lightScreen: boolean; auroraVeil: boolean;
+  tailwind: boolean; helpingHand: boolean; isCrit: boolean;
+  moveSlots: [MoveSlot, MoveSlot, MoveSlot, MoveSlot];
+  allMoves: ApiMove[];
   legalAbilities: string[];
   loadingMoves: boolean;
 }
@@ -121,14 +115,14 @@ function defaultConfig(): PokemonConfig {
     evHp:0, evAtk:0, evDef:0, evSpA:0, evSpD:0, evSpe:0,
     ivHp:31, ivAtk:31, ivDef:31, ivSpA:31, ivSpD:31, ivSpe:31,
     atkStage:0, defStage:0, spAStage:0, spDStage:0, speStage:0,
-    status: "none",
-    item: "None",
-    ability: "None",
-    moves: [],
-    legalAbilities: ["None"],
-    loadingMoves: false,
+    status: "none", item: "None", ability: "None",
     reflect: false, lightScreen: false, auroraVeil: false,
     tailwind: false, helpingHand: false, isCrit: false,
+    moveSlots: [
+      { moveName: "" }, { moveName: "" },
+      { moveName: "" }, { moveName: "" },
+    ],
+    allMoves: [], legalAbilities: ["None"], loadingMoves: false,
   };
 }
 
@@ -137,8 +131,7 @@ function buildCalcPokemon(config: PokemonConfig, level: number): CalcPokemon | n
   if (!p) return null;
   const n = config.nature;
   return {
-    name: p.name,
-    types: pokemonTypesFor(p),
+    name: p.name, types: pokemonTypesFor(p),
     baseHp: p.hp, baseAtk: p.attack, baseDef: p.defense,
     baseSpA: p.specialAttack, baseSpD: p.specialDefense, baseSpe: p.speed,
     hp:  calcHp(p.hp,              config.ivHp,  config.evHp,  level),
@@ -155,7 +148,7 @@ function buildCalcPokemon(config: PokemonConfig, level: number): CalcPokemon | n
   };
 }
 
-// ─── Stage select ─────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const STAGES = [-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6];
 
@@ -163,14 +156,10 @@ function StageSelect({ value, onChange }: { value: number; onChange: (v: number)
   return (
     <select value={value} onChange={e => onChange(Number(e.target.value))}
       className="h-7 rounded border bg-background text-xs px-1 w-14">
-      {STAGES.map(s => (
-        <option key={s} value={s}>{s > 0 ? `+${s}` : s === 0 ? "0" : s}</option>
-      ))}
+      {STAGES.map(s => <option key={s} value={s}>{s > 0 ? `+${s}` : s}</option>)}
     </select>
   );
 }
-
-// ─── Stat row with stage-modified value shown ─────────────────────────────────
 
 function StatRow({
   label, base, iv, ev, onIv, onEv, calc, stage, onStage, showStage, natureEffect,
@@ -181,8 +170,7 @@ function StatRow({
   showStage?: boolean; natureEffect?: number;
 }) {
   const color = natureEffect === 1.1 ? "text-green-400" : natureEffect === 0.9 ? "text-red-400" : "";
-  const stageModified = stage && stage !== 0 ? applyStage(calc, stage) : null;
-
+  const modified = showStage && stage && stage !== 0 ? applyStage(calc, stage) : null;
   return (
     <div className="grid grid-cols-[44px_40px_48px_52px_48px_60px_70px] gap-1 items-center text-xs">
       <span className={`font-semibold text-right ${color}`}>{label}</span>
@@ -194,16 +182,10 @@ function StatRow({
         onChange={e => onEv(Math.min(252,Math.max(0,Number(e.target.value))))}
         className="h-7 px-1 text-center text-xs" />
       <span className={`text-center font-mono font-bold ${color}`}>{calc}</span>
-      {showStage && onStage
-        ? <StageSelect value={stage ?? 0} onChange={onStage} />
-        : <span />
-      }
-      {/* Stage-modified stat shown in color */}
-      {showStage && stageModified !== null ? (
-        <span className={`text-xs font-bold tabular-nums ${stageModified > calc ? "text-green-400" : "text-red-400"}`}>
-          → {stageModified}
-        </span>
-      ) : <span />}
+      {showStage && onStage ? <StageSelect value={stage ?? 0} onChange={onStage} /> : <span />}
+      {modified !== null
+        ? <span className={`text-xs font-bold tabular-nums ${modified > calc ? "text-green-400" : "text-red-400"}`}>→ {modified}</span>
+        : <span />}
     </div>
   );
 }
@@ -217,7 +199,34 @@ function Checkbox({ label, checked, onChange }: { label: string; checked: boolea
   );
 }
 
-// ─── Pokémon panel ────────────────────────────────────────────────────────────
+// ─── Move slot row ─────────────────────────────────────────────────────────────
+
+function MoveSlotRow({
+  slotIndex, slot, allMoves, onSelect,
+}: {
+  slotIndex: number; slot: MoveSlot; allMoves: ApiMove[];
+  onSelect: (moveName: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-muted-foreground w-4">{slotIndex + 1}</span>
+      <select
+        value={slot.moveName}
+        onChange={e => onSelect(e.target.value)}
+        className="flex-1 rounded-md border bg-background px-2 py-1 text-xs"
+      >
+        <option value="">— Empty —</option>
+        {allMoves.map(m => (
+          <option key={m.name} value={m.name}>
+            {m.name} ({m.power}BP · {m.type} · {m.category})
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// ─── Pokémon panel ─────────────────────────────────────────────────────────────
 
 function PokemonPanel({
   label, config, onChange, allPokemon, teams, rosters, level, isAttacker,
@@ -249,11 +258,21 @@ function PokemonPanel({
 
   async function handlePokemonChange(pokemonId: string) {
     const found = allPokemon.find(pk => pk.id === pokemonId) ?? null;
-    onChange({ pokemon: found, moves: [], legalAbilities: ["None"], loadingMoves: !!found, ability: "None" });
+    onChange({
+      pokemon: found, allMoves: [], legalAbilities: ["None"],
+      loadingMoves: !!found, ability: "None",
+      moveSlots: [{ moveName:"" },{ moveName:"" },{ moveName:"" },{ moveName:"" }],
+    });
     if (found) {
       const data = await fetchPokemonData(found.dexNumber);
-      onChange({ moves: data.moves, legalAbilities: data.abilities, loadingMoves: false });
+      onChange({ allMoves: data.moves, legalAbilities: data.abilities, loadingMoves: false });
     }
+  }
+
+  function updateMoveSlot(slotIndex: number, moveName: string) {
+    const newSlots = [...config.moveSlots] as [MoveSlot, MoveSlot, MoveSlot, MoveSlot];
+    newSlots[slotIndex] = { moveName };
+    onChange({ moveSlots: newSlots });
   }
 
   return (
@@ -268,11 +287,11 @@ function PokemonPanel({
         )}
       </div>
 
-      {/* Team + Pokémon selectors */}
+      {/* Team + Pokémon */}
       <div className="grid gap-2 sm:grid-cols-2">
         <div className="space-y-1">
           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Team</label>
-          <select value={teamFilter} onChange={e => { setTeamFilter(e.target.value); onChange({ pokemon: null, moves: [], legalAbilities: ["None"] }); }}
+          <select value={teamFilter} onChange={e => { setTeamFilter(e.target.value); onChange({ pokemon: null, allMoves: [], legalAbilities: ["None"] }); }}
             className="w-full rounded-md border bg-background px-2 py-1.5 text-sm">
             <option value="all">All Pokémon</option>
             {teams.map(t => <option key={t.id} value={t.id}>{t.teamName}</option>)}
@@ -308,9 +327,8 @@ function PokemonPanel({
             </div>
             <div className="space-y-1">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Ability {config.loadingMoves && <span className="text-muted-foreground text-xs">(loading...)</span>}
+                Ability {config.loadingMoves && <span className="text-muted-foreground text-xs">(loading…)</span>}
               </label>
-              {/* Only show this Pokémon's legal abilities */}
               <select value={config.ability} onChange={e => onChange({ ability: e.target.value })}
                 className="w-full rounded-md border bg-background px-2 py-1.5 text-xs">
                 {config.legalAbilities.map(a => <option key={a} value={a}>{a}</option>)}
@@ -350,10 +368,26 @@ function PokemonPanel({
             <StatRow label="SpA" base={p.specialAttack}  iv={config.ivSpA} ev={config.evSpA} onIv={v=>onChange({ivSpA:v})} onEv={v=>onChange({evSpA:v})} calc={calcedSpA} stage={config.spAStage} onStage={v=>onChange({spAStage:v})} showStage natureEffect={n.spA} />
             <StatRow label="SpD" base={p.specialDefense} iv={config.ivSpD} ev={config.evSpD} onIv={v=>onChange({ivSpD:v})} onEv={v=>onChange({evSpD:v})} calc={calcedSpD} stage={config.spDStage} onStage={v=>onChange({spDStage:v})} showStage natureEffect={n.spD} />
             <StatRow label="Spe" base={p.speed}          iv={config.ivSpe} ev={config.evSpe} onIv={v=>onChange({ivSpe:v})} onEv={v=>onChange({evSpe:v})} calc={calcedSpe} stage={config.speStage} onStage={v=>onChange({speStage:v})} showStage natureEffect={n.spe} />
-            <div className="flex items-center justify-between border-t pt-1 text-xs text-muted-foreground">
+            <div className="flex justify-between border-t pt-1 text-xs text-muted-foreground">
               <span>EVs: <span className={totalEv > 508 ? "text-red-400 font-bold" : "font-semibold"}>{totalEv}</span>/508</span>
               <span>Eff. Speed: <span className="font-bold text-foreground">{effSpe}</span></span>
             </div>
+          </div>
+
+          {/* Move slots */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Moves {config.loadingMoves && <span className="text-muted-foreground">(loading…)</span>}
+            </label>
+            {config.moveSlots.map((slot, i) => (
+              <MoveSlotRow
+                key={i}
+                slotIndex={i}
+                slot={slot}
+                allMoves={config.allMoves}
+                onSelect={name => updateMoveSlot(i, name)}
+              />
+            ))}
           </div>
 
           {/* Side conditions */}
@@ -374,138 +408,131 @@ function PokemonPanel({
   );
 }
 
-// ─── Result panel ─────────────────────────────────────────────────────────────
+// ─── Result panel ──────────────────────────────────────────────────────────────
 
-function MoveResultDetail({
-  move, attackerCfg, defenderCfg, field, level,
+function MoveList({
+  heading, calcAttacker, calcDefender, moveSlots, allMoves, field, level, icon,
 }: {
-  move: ApiMove; attackerCfg: CalcPokemon; defenderCfg: CalcPokemon;
-  field: FieldConditions; level: number;
+  heading: string;
+  calcAttacker: CalcPokemon;
+  calcDefender: CalcPokemon;
+  moveSlots: [MoveSlot, MoveSlot, MoveSlot, MoveSlot];
+  allMoves: ApiMove[];
+  field: FieldConditions;
+  level: number;
+  icon: React.ReactNode;
 }) {
-  const m: Move = {
-    name: move.name, power: move.power ?? 0, type: move.type as PokemonType,
-    category: move.category, priority: move.priority, makesContact: move.makesContact,
-  };
-  const result = calculateDamage(attackerCfg, defenderCfg, m, field, level);
-  const hpPct = (dmg: number) => Math.floor(dmg / result.defenderHp * 1000) / 10;
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  // Build results for each filled slot
+  const slotResults = moveSlots.map((slot) => {
+    if (!slot.moveName) return null;
+    const apiMove = allMoves.find(m => m.name === slot.moveName);
+    if (!apiMove) return null;
+    const m: Move = {
+      name: apiMove.name, power: apiMove.power ?? 0,
+      type: apiMove.type as PokemonType, category: apiMove.category,
+      priority: apiMove.priority, makesContact: apiMove.makesContact,
+    };
+    return { apiMove, result: calculateDamage(calcAttacker, calcDefender, m, field, level) };
+  });
+
+  const selected = selectedIndex !== null ? slotResults[selectedIndex] : null;
 
   return (
-    <div className="mt-3 rounded-lg border bg-muted/20 p-4 space-y-3">
-      {/* Damage range bar */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Damage Range</span>
-          <span className="text-xs font-semibold">
-            {result.min}–{result.max} / {result.defenderHp} HP
-          </span>
-        </div>
-        <div className="relative h-4 rounded-full bg-muted overflow-hidden">
-          <div className="absolute h-full rounded-full bg-primary/30"
-            style={{ width: `${hpPct(result.max)}%` }} />
-          <div className="absolute h-full rounded-full bg-primary"
-            style={{ width: `${hpPct(result.min)}%` }} />
-        </div>
-        <div className="flex justify-between text-xs font-black">
-          <span>{result.minPercent}%</span>
-          <span>–</span>
-          <span>{result.maxPercent}%</span>
-        </div>
-      </div>
-
-      {/* KO chances */}
-      <div className="grid grid-cols-2 gap-2">
-        <div className={`rounded-lg p-2 text-center text-xs ${result.koChance.includes("Guaranteed") ? "bg-green-500/20 border border-green-500/40" : result.koChance !== "No OHKO" ? "bg-yellow-500/20 border border-yellow-500/40" : "bg-muted"}`}>
-          <p className="text-muted-foreground">OHKO</p>
-          <p className="font-black">{result.koChance}</p>
-        </div>
-        <div className={`rounded-lg p-2 text-center text-xs ${result.twoHkoChance.includes("Guaranteed") ? "bg-green-500/20 border border-green-500/40" : result.twoHkoChance !== "No 2HKO" ? "bg-yellow-500/20 border border-yellow-500/40" : "bg-muted"}`}>
-          <p className="text-muted-foreground">2HKO</p>
-          <p className="font-black">{result.twoHkoChance}</p>
-        </div>
-      </div>
-
-      {/* All 16 rolls */}
-      <div className="space-y-1">
-        <p className="text-xs text-muted-foreground">All 16 rolls (85%–100%):</p>
-        <div className="flex flex-wrap gap-1">
-          {result.rolls.map((r, i) => (
-            <span key={i} className={`rounded px-1.5 py-0.5 text-xs font-mono ${r >= result.defenderHp ? "bg-green-500/20 text-green-400 font-bold" : "bg-muted"}`}>
-              {r}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* Modifiers summary */}
-      <p className="text-xs text-muted-foreground">{result.description}</p>
-    </div>
-  );
-}
-
-function MovesSection({
-  sectionLabel, moves, attackerCfg, defenderCfg, field, level, icon,
-}: {
-  sectionLabel: string; moves: ApiMove[]; attackerCfg: CalcPokemon; defenderCfg: CalcPokemon;
-  field: FieldConditions; level: number; icon: React.ReactNode;
-}) {
-  const [selectedMove, setSelectedMove] = useState<string | null>(null);
-  const damageMoves = moves.filter(m => m.category !== "status" && (m.power ?? 0) > 0);
-
-  return (
-    <Card className="p-4 space-y-3">
+    <div className="space-y-2">
       <div className="flex items-center gap-2">
         {icon}
-        <span className="font-bold text-sm">{sectionLabel}</span>
+        <span className="text-sm font-bold">{heading}</span>
       </div>
-      {damageMoves.length === 0 ? (
-        <p className="text-xs text-muted-foreground italic">
-          {moves.length === 0 ? "Select a Pokémon to load moves" : "Loading moves..."}
-        </p>
-      ) : (
-        <div className="space-y-1">
-          <p className="text-xs text-muted-foreground mb-2">Click a move to see damage calculation:</p>
-          <div className="flex flex-wrap gap-1.5">
-            {damageMoves.map(move => {
-              const m: Move = {
-                name: move.name, power: move.power ?? 0, type: move.type as PokemonType,
-                category: move.category, priority: move.priority, makesContact: move.makesContact,
-              };
-              const result = calculateDamage(attackerCfg, defenderCfg, m, field, level);
-              const isSelected = selectedMove === move.name;
-              const pctColor =
-                result.maxPercent >= 100 ? "border-green-500 text-green-400" :
-                result.maxPercent >= 50  ? "border-yellow-500 text-yellow-400" :
-                result.maxPercent >= 25  ? "border-orange-500 text-orange-400" :
-                "border-border text-muted-foreground";
 
-              return (
-                <button
-                  key={move.name}
-                  onClick={() => setSelectedMove(isSelected ? null : move.name)}
-                  className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors ${isSelected ? "bg-primary/20 border-primary" : `hover:bg-muted ${pctColor}`}`}
-                >
-                  <TypeBadge type={move.type as PokemonType} />
-                  <span className="font-semibold">{move.name}</span>
-                  <span className="text-muted-foreground">{move.power}BP</span>
-                  <span className={`font-bold ${isSelected ? "" : pctColor.split(" ")[1]}`}>
-                    {result.minPercent}–{result.maxPercent}%
+      {/* Move rows */}
+      <div className="rounded-lg border overflow-hidden">
+        {moveSlots.map((slot, i) => {
+          const res = slotResults[i];
+          const isSelected = selectedIndex === i;
+
+          if (!slot.moveName || !res) {
+            return (
+              <div key={i} className="flex items-center gap-3 border-b last:border-b-0 px-3 py-2 bg-muted/20">
+                <span className="text-xs text-muted-foreground w-4">{i + 1}</span>
+                <span className="text-xs text-muted-foreground italic">— empty —</span>
+              </div>
+            );
+          }
+
+          const { apiMove, result } = res;
+          const pctColor =
+            result.maxPercent >= 100 ? "text-green-400" :
+            result.maxPercent >= 50  ? "text-yellow-400" :
+            result.maxPercent >= 25  ? "text-orange-400" : "text-muted-foreground";
+
+          return (
+            <button
+              key={i}
+              onClick={() => setSelectedIndex(isSelected ? null : i)}
+              className={`w-full flex items-center gap-3 border-b last:border-b-0 px-3 py-2 text-left transition-colors hover:bg-muted/50 ${isSelected ? "bg-primary/15 border-l-2 border-l-primary" : ""}`}
+            >
+              <span className="text-xs text-muted-foreground w-4">{i + 1}</span>
+              <TypeBadge type={apiMove.type as PokemonType} />
+              <span className="flex-1 text-sm font-semibold">{apiMove.name}</span>
+              <span className="text-xs text-muted-foreground">{apiMove.power}BP</span>
+              <span className={`text-sm font-black tabular-nums min-w-[90px] text-right ${pctColor}`}>
+                {result.minPercent}–{result.maxPercent}%
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Expanded result — Showdown style description */}
+      {selected && (() => {
+        const { apiMove, result } = selected;
+        const koText =
+          result.koChance.includes("Guaranteed OHKO") ? "guaranteed OHKO" :
+          result.koChance.includes("OHKO") ? result.koChance.toLowerCase() :
+          result.twoHkoChance.includes("Guaranteed 2HKO") ? "guaranteed 2HKO" :
+          result.twoHkoChance.includes("2HKO") ? result.twoHkoChance.toLowerCase() : "";
+
+        return (
+          <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+            {/* Showdown-style description line */}
+            <p className="text-sm font-bold leading-snug">
+              {calcAttacker.name} {apiMove.name} vs. {calcDefender.name}:{" "}
+              <span className="text-primary">{result.min}–{result.max}</span>{" "}
+              <span className="text-muted-foreground">({result.minPercent}–{result.maxPercent}%)</span>
+              {koText && <span className="text-green-400"> — {koText}</span>}
+            </p>
+
+            {/* HP bar */}
+            <div className="space-y-1">
+              <div className="relative h-3 rounded-full bg-muted overflow-hidden">
+                <div className="absolute h-full rounded-full bg-primary/30"
+                  style={{ width: `${Math.min(100, result.maxPercent)}%` }} />
+                <div className="absolute h-full rounded-full bg-primary"
+                  style={{ width: `${Math.min(100, result.minPercent)}%` }} />
+              </div>
+            </div>
+
+            {/* All 16 rolls */}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Possible damage amounts (16 rolls):</p>
+              <div className="flex flex-wrap gap-1">
+                {result.rolls.map((r, ri) => (
+                  <span key={ri}
+                    className={`rounded px-1.5 py-0.5 text-xs font-mono ${r >= result.defenderHp ? "bg-green-500/20 text-green-400 font-bold" : "bg-muted"}`}>
+                    {r}
                   </span>
-                </button>
-              );
-            })}
+                ))}
+              </div>
+            </div>
+
+            {/* Modifier tags */}
+            <p className="text-xs text-muted-foreground">{result.description}</p>
           </div>
-          {selectedMove && (() => {
-            const move = damageMoves.find(m => m.name === selectedMove);
-            return move ? (
-              <MoveResultDetail
-                move={move} attackerCfg={attackerCfg} defenderCfg={defenderCfg}
-                field={field} level={level}
-              />
-            ) : null;
-          })()}
-        </div>
-      )}
-    </Card>
+        );
+      })()}
+    </div>
   );
 }
 
@@ -532,7 +559,7 @@ function ResultPanel({
 
   return (
     <div className="space-y-4">
-      {/* Speed comparison */}
+      {/* Speed */}
       <Card className="p-4 flex items-center gap-4">
         <Zap size={20} className="text-yellow-400 shrink-0" />
         <div className="flex-1 grid grid-cols-3 gap-2 text-center text-sm">
@@ -540,10 +567,8 @@ function ResultPanel({
             <p className="font-bold truncate">{attacker.pokemon?.name}</p>
             <p className={`text-lg font-black ${atkSpe > defSpe ? "text-green-400" : "text-muted-foreground"}`}>{atkSpe}</p>
           </div>
-          <div className="flex items-center justify-center">
-            <span className="text-xs text-muted-foreground">
-              {atkSpe > defSpe ? "⚡ Goes first" : atkSpe < defSpe ? "Goes second" : "Speed tie"}
-            </span>
+          <div className="flex items-center justify-center text-xs text-muted-foreground">
+            {atkSpe > defSpe ? "⚡ Goes first" : atkSpe < defSpe ? "Goes second" : "Speed tie"}
           </div>
           <div>
             <p className="font-bold truncate">{defender.pokemon?.name}</p>
@@ -552,60 +577,51 @@ function ResultPanel({
         </div>
       </Card>
 
-      {/* Attacker moves → Defender */}
-      <MovesSection
-        sectionLabel={`${attacker.pokemon?.name} → ${defender.pokemon?.name}`}
-        moves={attacker.moves}
-        attackerCfg={calcAtk}
-        defenderCfg={calcDef}
-        field={field}
-        level={level}
-        icon={<Swords size={16} className="text-red-400" />}
-      />
-
-      {/* Defender moves → Attacker */}
-      <MovesSection
-        sectionLabel={`${defender.pokemon?.name} → ${attacker.pokemon?.name}`}
-        moves={defender.moves}
-        attackerCfg={calcDef}
-        defenderCfg={calcAtk}
-        field={field}
-        level={level}
-        icon={<Shield size={16} className="text-blue-400" />}
-      />
+      {/* Side by side move lists */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="p-4">
+          <MoveList
+            heading={`${attacker.pokemon?.name}'s Moves`}
+            calcAttacker={calcAtk} calcDefender={calcDef}
+            moveSlots={attacker.moveSlots} allMoves={attacker.allMoves}
+            field={field} level={level}
+            icon={<Swords size={14} className="text-red-400" />}
+          />
+        </Card>
+        <Card className="p-4">
+          <MoveList
+            heading={`${defender.pokemon?.name}'s Moves`}
+            calcAttacker={calcDef} calcDefender={calcAtk}
+            moveSlots={defender.moveSlots} allMoves={defender.allMoves}
+            field={field} level={level}
+            icon={<Shield size={14} className="text-blue-400" />}
+          />
+        </Card>
+      </div>
     </div>
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function DamageCalculator({
   pokemon, teams, rosters,
 }: {
   pokemon: Pokemon[]; teams: Team[]; rosters: Record<string, Pokemon[]>;
 }) {
-  const [level,    setLevel]   = useState(100);
-  const [weather,  setWeather] = useState<Weather>("none");
-  const [terrain,  setTerrain] = useState<Terrain>("none");
+  const [level,     setLevel]    = useState(100);
+  const [weather,   setWeather]  = useState<Weather>("none");
+  const [terrain,   setTerrain]  = useState<Terrain>("none");
   const [isDoubles, setIsDoubles] = useState(false);
-  const [attacker, setAttackerState] = useState<PokemonConfig>(defaultConfig());
-  const [defender, setDefenderState] = useState<PokemonConfig>(defaultConfig());
-
-  function updateAttacker(updates: Partial<PokemonConfig>) {
-    setAttackerState(prev => ({ ...prev, ...updates }));
-  }
-  function updateDefender(updates: Partial<PokemonConfig>) {
-    setDefenderState(prev => ({ ...prev, ...updates }));
-  }
+  const [attacker,  setAttackerState] = useState<PokemonConfig>(defaultConfig());
+  const [defender,  setDefenderState] = useState<PokemonConfig>(defaultConfig());
 
   const field: FieldConditions = { weather, terrain, isDoublesFormat: isDoubles };
 
   return (
     <div className="space-y-6">
-      {/* Result at top */}
       <ResultPanel attacker={attacker} defender={defender} field={field} level={level} />
 
-      {/* Field conditions */}
       <Card className="p-4 space-y-4">
         <h3 className="font-bold">Field Conditions</h3>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -648,11 +664,12 @@ export function DamageCalculator({
         </div>
       </Card>
 
-      {/* Pokémon panels */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <PokemonPanel label="⚔️ Attacker" config={attacker} onChange={updateAttacker}
+        <PokemonPanel label="⚔️ Attacker" config={attacker}
+          onChange={u => setAttackerState(p => ({ ...p, ...u }))}
           allPokemon={pokemon} teams={teams} rosters={rosters} level={level} isAttacker />
-        <PokemonPanel label="🛡️ Defender" config={defender} onChange={updateDefender}
+        <PokemonPanel label="🛡️ Defender" config={defender}
+          onChange={u => setDefenderState(p => ({ ...p, ...u }))}
           allPokemon={pokemon} teams={teams} rosters={rosters} level={level} isAttacker={false} />
       </div>
     </div>
