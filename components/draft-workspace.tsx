@@ -7,7 +7,7 @@ import { TypeBadge } from "@/components/type-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { defenseProfile, pokemonTypes, pokemonTypesFor, typeColors } from "@/lib/type-chart";
+import { multiplier, pokemonTypes, pokemonTypesFor, typeColors } from "@/lib/type-chart";
 import type { Pokemon, PokemonType } from "@/lib/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -104,14 +104,12 @@ function CoverageMap({ slots }: { slots: BuilderSlot[] }) {
       // How many of our Pokémon can hit this type super effectively
       const hits = pokemon.filter(mon =>
         pokemonTypesFor(mon).some(atkType => {
-          const { multiplier } = require("@/lib/type-chart");
-          return multiplier(atkType, [defType]) > 1;
+              return multiplier(atkType, [defType]) > 1;
         })
       ).length;
       // How many of our Pokémon are weak to this type
       const weakTo = pokemon.filter(mon => {
-        const { multiplier } = require("@/lib/type-chart");
-        return multiplier(defType, pokemonTypesFor(mon)) > 1;
+          return multiplier(defType, pokemonTypesFor(mon)) > 1;
       }).length;
       return { type: defType, hits, weakTo };
     });
@@ -192,7 +190,6 @@ function ThreatScore({ slots }: { slots: BuilderSlot[] }) {
   const weaknessCounts = pokemonTypes.map(type => ({
     type,
     count: pokemon.filter(mon => {
-      const { multiplier } = require("@/lib/type-chart");
       return multiplier(type, pokemonTypesFor(mon)) > 1;
     }).length,
   })).filter(r => r.count > 0).sort((a, b) => b.count - a.count).slice(0, 5);
