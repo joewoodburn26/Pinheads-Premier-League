@@ -328,14 +328,13 @@ function exportToPdf(slots: BuilderSlot[], budget: number) {
 // ─── Team Builder sidebar ─────────────────────────────────────────────────────
 
 function TeamBuilder({
-  slots, onRemove, onNoteChange, onClear, budget, allPokemon,
+  slots, onRemove, onNoteChange, onClear, budget,
 }: {
   slots: BuilderSlot[];
   onRemove: (id: string) => void;
   onNoteChange: (id: string, note: string) => void;
   onClear: () => void;
   budget: number;
-  allPokemon: Pokemon[];
 }) {
   const [shareMsg, setShareMsg] = useState("");
   const used    = slots.reduce((s, b) => s + b.pokemon.pointValue, 0);
@@ -544,7 +543,7 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
       if (types.length > 0 && !types.every(t => pokemonTypesFor(m).includes(t))) return false;
       return true;
     }).sort((a, b) => {
-      let diff = sortKey === "name" ? a.name.localeCompare(b.name) : (a[sortKey] as number) - (b[sortKey] as number);
+      const diff = sortKey === "name" ? a.name.localeCompare(b.name) : (a[sortKey] as number) - (b[sortKey] as number);
       return sortDir === "asc" ? diff : -diff;
     });
   }, [legal, query, types, minPts, maxPts, sortKey, sortDir]);
@@ -731,7 +730,6 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
             onNoteChange={updateNote}
             onClear={() => setSlots([])}
             budget={budget}
-            allPokemon={pokemon}
           />
         </div>
       </aside>
