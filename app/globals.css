@@ -6,9 +6,9 @@
   :root {
     --background: 224 71% 4%;
     --foreground: 213 31% 91%;
-    --card: 224 71% 4%;
+    --card: 222 47% 6%;
     --card-foreground: 213 31% 91%;
-    --popover: 224 71% 4%;
+    --popover: 222 47% 6%;
     --popover-foreground: 213 31% 91%;
     --primary: 210 40% 98%;
     --primary-foreground: 222.2 47.4% 1.2%;
@@ -26,52 +26,62 @@
     --radius: 0.5rem;
   }
 
+  html {
+    /* Full page deep dark background — no hard lines */
+    background-color: hsl(224, 71%, 4%);
+    min-height: 100%;
+  }
+
   body {
     font-family: var(--font-body), sans-serif;
+    min-height: 100vh;
+    background-color: transparent;
   }
 }
 
-/* ── Page theme: Homepage — Crimson & Gold ──────────────────────────────── */
+/* ── Homepage theme — Crimson & Gold ─────────────────────────────────────── */
 .theme-home {
   --theme-primary:   #DC2626;
   --theme-secondary: #D97706;
-  --theme-glow:      rgba(220, 38, 38, 0.15);
-  --theme-glow-2:    rgba(217, 119, 6, 0.1);
+  --theme-glow:      rgba(220, 38, 38, 0.12);
+  --theme-glow-2:    rgba(217, 119, 6, 0.08);
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 0%, rgba(220, 38, 38, 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(217, 119, 6, 0.06) 0%, transparent 50%),
+    hsl(224, 71%, 4%);
+  background-attachment: fixed;
 }
 
-/* ── Page theme: Settings — Gray & White ───────────────────────────────── */
+/* ── Settings theme — Gray & White ──────────────────────────────────────── */
 .theme-settings {
   --theme-primary:   #94A3B8;
   --theme-secondary: #F1F5F9;
-  --theme-glow:      rgba(148, 163, 184, 0.1);
-  --theme-glow-2:    rgba(241, 245, 249, 0.05);
+  --theme-glow:      rgba(148, 163, 184, 0.08);
+  --theme-glow-2:    rgba(241, 245, 249, 0.04);
+  background:
+    radial-gradient(ellipse 70% 40% at 50% 0%, rgba(148, 163, 184, 0.07) 0%, transparent 60%),
+    hsl(224, 71%, 4%);
+  background-attachment: fixed;
 }
 
-/* ── Page theme: League pages (Teams/Rosters/Draft) — Green & Silver ────── */
+/* ── League theme — Green & Silver (Rosters/Draft) ───────────────────────── */
 .theme-league {
   --theme-primary:   #16A34A;
   --theme-secondary: #94A3B8;
-  --theme-glow:      rgba(22, 163, 74, 0.15);
-  --theme-glow-2:    rgba(148, 163, 184, 0.08);
+  --theme-glow:      rgba(22, 163, 74, 0.1);
+  --theme-glow-2:    rgba(148, 163, 184, 0.06);
+  background:
+    radial-gradient(ellipse 70% 40% at 10% 0%, rgba(22, 163, 74, 0.08) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 35% at 90% 100%, rgba(148, 163, 184, 0.05) 0%, transparent 50%),
+    hsl(224, 71%, 4%);
+  background-attachment: fixed;
 }
 
-/* ── Theme utility classes ──────────────────────────────────────────────── */
-.theme-accent {
-  color: var(--theme-primary);
-}
-.theme-accent-2 {
-  color: var(--theme-secondary);
-}
-.theme-accent-bg {
-  background-color: var(--theme-primary);
-}
-.theme-accent-border {
-  border-color: var(--theme-primary);
-}
-.theme-glow-bg {
-  background: radial-gradient(ellipse at top, var(--theme-glow) 0%, transparent 60%),
-              radial-gradient(ellipse at bottom right, var(--theme-glow-2) 0%, transparent 50%);
-}
+/* ── Theme utility classes ───────────────────────────────────────────────── */
+.theme-accent        { color: var(--theme-primary); }
+.theme-accent-2      { color: var(--theme-secondary); }
+.theme-accent-bg     { background-color: var(--theme-primary); }
+.theme-accent-border { border-color: var(--theme-primary); }
 
 /* ── Pokéball watermark pattern ─────────────────────────────────────────── */
 .pokeball-bg {
@@ -85,15 +95,15 @@
   background-image:
     radial-gradient(circle at 50% 50%,
       transparent 28%,
-      rgba(255,255,255,0.03) 28%,
-      rgba(255,255,255,0.03) 32%,
+      rgba(255,255,255,0.025) 28%,
+      rgba(255,255,255,0.025) 32%,
       transparent 32%
     ),
     radial-gradient(circle at 50% 50%,
-      rgba(255,255,255,0.02) 45%,
+      rgba(255,255,255,0.015) 45%,
       transparent 45%
     );
-  background-size: 120px 120px;
+  background-size: 140px 140px;
   background-position: center;
   pointer-events: none;
   z-index: 0;
@@ -104,22 +114,21 @@
 }
 
 /* ── Team accent colors ──────────────────────────────────────────────────── */
-.team-fairy    { --team-color: #D685AD; --team-glow: rgba(214,133,173,0.2); }
-.team-dark     { --team-color: #705746; --team-glow: rgba(112,87,70,0.25);  }
-.team-steel    { --team-color: #B7B7CE; --team-glow: rgba(183,183,206,0.2); }
-.team-flying   { --team-color: #A98FF3; --team-glow: rgba(169,143,243,0.2); }
-.team-fire     { --team-color: #EE8130; --team-glow: rgba(238,129,48,0.2);  }
-.team-water    { --team-color: #6390F0; --team-glow: rgba(99,144,240,0.2);  }
-.team-normal   { --team-color: #D685AD; --team-glow: rgba(214,133,173,0.2); }
+.team-fairy  { --team-color: #D685AD; --team-glow: rgba(214,133,173,0.18); }
+.team-dark   { --team-color: #9d7560; --team-glow: rgba(157,117,96,0.2);   }
+.team-steel  { --team-color: #B7B7CE; --team-glow: rgba(183,183,206,0.18); }
+.team-flying { --team-color: #A98FF3; --team-glow: rgba(169,143,243,0.18); }
+.team-fire   { --team-color: #EE8130; --team-glow: rgba(238,129,48,0.18);  }
+.team-water  { --team-color: #6390F0; --team-glow: rgba(99,144,240,0.18);  }
+.team-normal { --team-color: #D685AD; --team-glow: rgba(214,133,173,0.18); }
 
 .team-card-accent {
   border-top: 3px solid var(--team-color);
   box-shadow: 0 0 20px var(--team-glow), 0 4px 6px rgba(0,0,0,0.3);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
 }
 .team-card-accent:hover {
   box-shadow: 0 0 35px var(--team-glow), 0 8px 15px rgba(0,0,0,0.4);
   transform: translateY(-3px);
 }
-.team-name-color {
-  color: var(--team-color);
-}
+.team-name-color { color: var(--team-color); }
