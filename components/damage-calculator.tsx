@@ -102,6 +102,7 @@ interface PokemonConfig {
   ability: string;
   reflect: boolean; lightScreen: boolean; auroraVeil: boolean;
   tailwind: boolean; helpingHand: boolean; isCrit: boolean;
+  currentHpPct: number; // 0-100, default 100 (full HP)
   moveSlots: [MoveSlot, MoveSlot, MoveSlot, MoveSlot];
   allMoves: ApiMove[];
   legalAbilities: string[];
@@ -118,6 +119,7 @@ function defaultConfig(): PokemonConfig {
     status: "none", item: "None", ability: "None",
     reflect: false, lightScreen: false, auroraVeil: false,
     tailwind: false, helpingHand: false, isCrit: false,
+    currentHpPct: 100,
     moveSlots: [
       { moveName: "" }, { moveName: "" },
       { moveName: "" }, { moveName: "" },
@@ -130,11 +132,13 @@ function buildCalcPokemon(config: PokemonConfig, level: number): CalcPokemon | n
   const p = config.pokemon;
   if (!p) return null;
   const n = config.nature;
+  const maxHp = calcHp(p.hp, config.ivHp, config.evHp, level);
+  const currentHp = Math.max(1, Math.floor(maxHp * config.currentHpPct / 100));
   return {
     name: p.name, types: pokemonTypesFor(p),
     baseHp: p.hp, baseAtk: p.attack, baseDef: p.defense,
     baseSpA: p.specialAttack, baseSpD: p.specialDefense, baseSpe: p.speed,
-    hp:  calcHp(p.hp,              config.ivHp,  config.evHp,  level),
+    hp: maxHp, currentHp,
     atk: calcStat(p.attack,         config.ivAtk, config.evAtk, level, n.atk),
     def: calcStat(p.defense,        config.ivDef, config.evDef, level, n.def),
     spA: calcStat(p.specialAttack,  config.ivSpA, config.evSpA, level, n.spA),
@@ -336,19 +340,34 @@ function PokemonPanel({
             </div>
           </div>
 
-          {/* Status */}
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</label>
-            <select value={config.status} onChange={e => onChange({ status: e.target.value as Status })}
-              className="w-full rounded-md border bg-background px-2 py-1.5 text-sm">
-              <option value="none">Healthy</option>
-              <option value="burn">Burned</option>
-              <option value="paralysis">Paralyzed</option>
-              <option value="poison">Poisoned</option>
-              <option value="badPoison">Badly Poisoned</option>
-              <option value="sleep">Asleep</option>
-              <option value="freeze">Frozen</option>
-            </select>
+          {/* Status + Current HP */}
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</label>
+              <select value={config.status} onChange={e => onChange({ status: e.target.value as Status })}
+                className="w-full rounded-md border bg-background px-2 py-1.5 text-sm">
+                <option value="none">Healthy</option>
+                <option value="burn">Burned</option>
+                <option value="paralysis">Paralyzed</option>
+                <option value="poison">Poisoned</option>
+                <option value="badPoison">Badly Poisoned</option>
+                <option value="sleep">Asleep</option>
+                <option value="freeze">Frozen</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Current HP: <span className={`font-bold ${config.currentHpPct <= 33 ? "text-red-400" : config.currentHpPct <= 50 ? "text-yellow-400" : "text-green-400"}`}>{config.currentHpPct}%</span>
+              </label>
+              <input type="range" min={1} max={100} value={config.currentHpPct}
+                onChange={e => onChange({ currentHpPct: Number(e.target.value) })}
+                className="w-full accent-primary" />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>1%</span>
+                <span>⅓ HP</span>
+                <span>Full</span>
+              </div>
+            </div>
           </div>
 
           {/* Stat table */}
@@ -501,6 +520,7 @@ function MoveList({
               {calcAttacker.name} {apiMove.name} vs. {calcDefender.name}:{" "}
               <span className="text-primary">{result.min}–{result.max}</span>{" "}
               <span className="text-muted-foreground">({result.minPercent}–{result.maxPercent}%)</span>
+              {result.hits > 1 && <span className="text-yellow-400"> · {result.hits} hits</span>}
               {koText && <span className="text-green-400"> — {koText}</span>}
             </p>
 
