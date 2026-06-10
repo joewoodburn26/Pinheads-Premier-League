@@ -1,5 +1,6 @@
 import { DamageCalculator } from "@/components/damage-calculator";
 import { getActiveSeason, getPokemon, getTeams, getRoster } from "@/lib/data";
+import type { Pokemon } from "@/lib/types";
 
 export default async function DamageCalculatorPage() {
   const season = await getActiveSeason();
@@ -8,12 +9,12 @@ export default async function DamageCalculatorPage() {
     getTeams(season.id),
   ]);
 
-  const rostersRaw = await Promise.all(teams.map((t) => getRoster(t.id)));
-  const rosters: Record<string, typeof pokemon> = {};
+  const rostersRaw = await Promise.all(teams.map(t => getRoster(t.id)));
+  const rosters: Record<string, Pokemon[]> = {};
   teams.forEach((team, i) => {
     rosters[team.id] = rostersRaw[i]
-      .map((slot) => slot.pokemon)
-      .filter(Boolean) as typeof pokemon;
+      .map(slot => slot.pokemon)
+      .filter(Boolean) as Pokemon[];
   });
 
   return (
@@ -21,7 +22,7 @@ export default async function DamageCalculatorPage() {
       <div>
         <h1 className="text-3xl font-black">Damage Calculator</h1>
         <p className="text-muted-foreground">
-          Gen 9 damage formula · filter by team to see only their 10 Pokémon
+          Gen 9 · select a team to filter Pokémon · moves load automatically from PokéAPI
         </p>
       </div>
       <DamageCalculator pokemon={pokemon} teams={teams} rosters={rosters} />
