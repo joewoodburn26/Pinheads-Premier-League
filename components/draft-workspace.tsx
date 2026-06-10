@@ -629,7 +629,7 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
   );
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+    <div className="grid gap-6 xl:grid-cols-2">
       <section className="space-y-4">
         {/* View toggle */}
         <div className="flex items-center gap-2">
@@ -708,7 +708,7 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
                   <span className="text-sm font-semibold text-muted-foreground">pts</span>
                   <span className="ml-auto text-xs text-muted-foreground">{mons.length} Pokémon</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 py-3 sm:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10">
+                <div className="grid grid-cols-3 gap-2 py-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                   {mons.map(mon => (
                     <TierCell key={mon.id} mon={mon}
                       inBuilder={slots.some(s => s.pokemon.id === mon.id)}
