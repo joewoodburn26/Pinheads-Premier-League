@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { User } from "lucide-react";
-import type { Team, TeamPokemon, Pokemon } from "@/lib/types";
+import type { Team, Pokemon } from "@/lib/types";
 import { initials } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 
