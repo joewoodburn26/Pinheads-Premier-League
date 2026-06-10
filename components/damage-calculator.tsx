@@ -58,7 +58,7 @@ async function fetchMoves(dexNumber: number): Promise<ApiMove[]> {
             return {
               name: m.name.split("-").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
               power: m.power,
-              type: m.type?.name.charAt(0).toUpperCase() + m.type?.name.slice(1) as PokemonType,
+              type: (m.type ? m.type.name.charAt(0).toUpperCase() + m.type.name.slice(1) : "Normal") as PokemonType,
               category: m.damage_class?.name as MoveCategory,
               priority: m.priority ?? 0,
               makesContact: m.meta?.category?.name?.includes("damage") ?? false,
