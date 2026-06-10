@@ -380,7 +380,7 @@ function ResultPanel({
   }
 
   function renderMoveResults(moves: ApiMove[], attackerCfg: CalcPokemon, defenderCfg: CalcPokemon, label: string) {
-    const damageMoves = moves.filter(m => m.category !== "status" && m.power > 0);
+    const damageMoves = moves.filter(m => m.category !== "status" && (m.power ?? 0) > 0);
     if (damageMoves.length === 0) return (
       <div className="text-xs text-muted-foreground italic">No moves loaded yet</div>
     );
