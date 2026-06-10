@@ -352,7 +352,7 @@ export function calculateDamage(
   ) typeMult *= 0.75;
 
   // Defender immunity via ability
-  const defAbilMod = getDefenderAbilityMod(defender.ability, move, field.weather);
+  const defAbilMod = getDefenderAbilityMod(defender.ability, move);
   if (defAbilMod === 0) {
     return {
       rolls: [0], min: 0, max: 0, minPercent: 0, maxPercent: 0,
