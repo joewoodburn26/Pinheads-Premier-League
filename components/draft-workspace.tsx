@@ -352,116 +352,116 @@ function TeamBuilder({
   }
 
   return (
-    <div className="space-y-3">
-      {/* Header + actions */}
-      <Card className="p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-black">Team Builder</h2>
-          <div className="flex gap-1.5">
-            <button onClick={handleShare} title="Copy shareable link"
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-              <Share2 size={15} />
-            </button>
-            <button onClick={() => exportToPdf(slots, budget)} title="Export as PDF"
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-              <Download size={15} />
-            </button>
-            {slots.length > 0 && (
-              <button onClick={onClear} title="Clear team"
-                className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors">
-                <Trash2 size={15} />
+    <div className="grid gap-4 lg:grid-cols-2">
+      {/* LEFT — team list */}
+      <div className="space-y-3">
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-black">Team Builder</h2>
+            <div className="flex gap-1.5">
+              <button onClick={handleShare} title="Copy shareable link"
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                <Share2 size={15} />
               </button>
-            )}
-          </div>
-        </div>
-        {shareMsg && <p className="text-xs text-green-400">{shareMsg}</p>}
-        <p className="text-xs text-muted-foreground">Click any Pokémon to add · click again to remove</p>
-
-        {/* Budget bar */}
-        <div className="space-y-1">
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">Budget</span>
-            <span className={`font-bold ${overBudget ? "text-red-400" : ""}`}>{used} / {budget} pts</span>
-          </div>
-          <div className="h-2.5 rounded-full bg-muted overflow-hidden">
-            <div className={`h-full rounded-full transition-all ${overBudget ? "bg-red-500" : pctUsed > 80 ? "bg-yellow-400" : "bg-green-500"}`}
-              style={{ width: `${pctUsed}%` }} />
-          </div>
-        </div>
-
-        {/* Stats summary */}
-        <div className="grid grid-cols-3 gap-2 text-center text-sm">
-          <div className="rounded-md bg-muted p-2">
-            <p className="text-lg font-black">{slots.length}</p>
-            <p className="text-xs text-muted-foreground">Pokémon</p>
-          </div>
-          <div className="rounded-md bg-muted p-2">
-            <p className={`text-lg font-black ${overBudget ? "text-red-400" : ""}`}>{budget - used}</p>
-            <p className="text-xs text-muted-foreground">Pts left</p>
-          </div>
-          <div className="rounded-md bg-muted p-2">
-            <p className="text-lg font-black">{avgBst}</p>
-            <p className="text-xs text-muted-foreground">Avg BST</p>
-          </div>
-        </div>
-
-        {/* Pokémon list with sprites, types, notes */}
-        <div className="space-y-2">
-          {slots.length === 0 && <p className="text-xs text-muted-foreground italic">No Pokémon added yet</p>}
-          {slots.map(({ pokemon: mon, note }) => (
-            <div key={mon.id} className="rounded-lg border bg-muted/30 p-2 space-y-1.5">
-              <div className="flex items-center gap-2">
-                <Image src={mon.spriteUrl} alt={mon.name} width={36} height={36} className="size-8 object-contain shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold truncate">{mon.name}</p>
-                  <div className="flex items-center gap-1 flex-wrap">
-                    {pokemonTypesFor(mon).map(t => <TypeBadge key={t} type={t} />)}
-                    <span className="text-xs font-bold text-primary ml-auto">{mon.pointValue}pts</span>
-                  </div>
-                </div>
-                <button onClick={() => onRemove(mon.id)}
-                  className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors">
-                  <X size={14} />
+              <button onClick={() => exportToPdf(slots, budget)} title="Export as PDF"
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                <Download size={15} />
+              </button>
+              {slots.length > 0 && (
+                <button onClick={onClear} title="Clear team"
+                  className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors">
+                  <Trash2 size={15} />
                 </button>
-              </div>
-              {/* Notes field */}
-              <input
-                type="text"
-                placeholder="Add notes (strategy, moves…)"
-                value={note}
-                onChange={e => onNoteChange(mon.id, e.target.value)}
-                className="w-full rounded border bg-background px-2 py-1 text-xs text-muted-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary"
-              />
+              )}
             </div>
-          ))}
-        </div>
-      </Card>
+          </div>
+          {shareMsg && <p className="text-xs text-green-400">{shareMsg}</p>}
+          <p className="text-xs text-muted-foreground">Click any Pokémon to add · click again to remove</p>
 
-      {/* Coverage map */}
-      <Card className="p-4 space-y-2">
-        <h3 className="font-bold text-sm">Type Coverage</h3>
-        <p className="text-xs text-muted-foreground">↑ = your hits · ↓ = your weaknesses</p>
-        <CoverageMap slots={slots} />
-      </Card>
+          {/* Budget bar */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Budget</span>
+              <span className={`font-bold ${overBudget ? "text-red-400" : ""}`}>{used} / {budget} pts</span>
+            </div>
+            <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${overBudget ? "bg-red-500" : pctUsed > 80 ? "bg-yellow-400" : "bg-green-500"}`}
+                style={{ width: `${pctUsed}%` }} />
+            </div>
+          </div>
 
-      {/* Role balance */}
-      <Card className="p-4 space-y-2">
-        <h3 className="font-bold text-sm">Role Balance</h3>
-        <RoleBalance slots={slots} />
-      </Card>
+          {/* Stats summary */}
+          <div className="grid grid-cols-3 gap-2 text-center text-sm">
+            <div className="rounded-md bg-muted p-2">
+              <p className="text-lg font-black">{slots.length}</p>
+              <p className="text-xs text-muted-foreground">Pokémon</p>
+            </div>
+            <div className="rounded-md bg-muted p-2">
+              <p className={`text-lg font-black ${overBudget ? "text-red-400" : ""}`}>{budget - used}</p>
+              <p className="text-xs text-muted-foreground">Pts left</p>
+            </div>
+            <div className="rounded-md bg-muted p-2">
+              <p className="text-lg font-black">{avgBst}</p>
+              <p className="text-xs text-muted-foreground">Avg BST</p>
+            </div>
+          </div>
 
-      {/* Threat score */}
-      <Card className="p-4 space-y-2">
-        <h3 className="font-bold text-sm">Top Threats</h3>
-        <p className="text-xs text-muted-foreground">Types that hit the most of your team</p>
-        <ThreatScore slots={slots} />
-      </Card>
+          {/* Pokémon list */}
+          <div className="space-y-2">
+            {slots.length === 0 && <p className="text-xs text-muted-foreground italic">No Pokémon added yet</p>}
+            {slots.map(({ pokemon: mon, note }) => (
+              <div key={mon.id} className="rounded-lg border bg-muted/30 p-2 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Image src={mon.spriteUrl} alt={mon.name} width={36} height={36} className="size-8 object-contain shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold truncate">{mon.name}</p>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {pokemonTypesFor(mon).map(t => <TypeBadge key={t} type={t} />)}
+                      <span className="text-xs font-bold text-primary ml-auto">{mon.pointValue}pts</span>
+                    </div>
+                  </div>
+                  <button onClick={() => onRemove(mon.id)}
+                    className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/20 hover:text-destructive transition-colors">
+                    <X size={14} />
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Add notes (strategy, moves…)"
+                  value={note}
+                  onChange={e => onNoteChange(mon.id, e.target.value)}
+                  className="w-full rounded border bg-background px-2 py-1 text-xs text-muted-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
 
-      {/* Speed tiers */}
-      <Card className="p-4 space-y-2">
-        <h3 className="font-bold text-sm">Speed Tiers</h3>
-        <SpeedTiers slots={slots} />
-      </Card>
+      {/* RIGHT — analytics */}
+      <div className="space-y-3">
+        <Card className="p-4 space-y-2">
+          <h3 className="font-bold text-sm">Type Coverage</h3>
+          <p className="text-xs text-muted-foreground">↑ = your hits · ↓ = your weaknesses</p>
+          <CoverageMap slots={slots} />
+        </Card>
+
+        <Card className="p-4 space-y-2">
+          <h3 className="font-bold text-sm">Role Balance</h3>
+          <RoleBalance slots={slots} />
+        </Card>
+
+        <Card className="p-4 space-y-2">
+          <h3 className="font-bold text-sm">Top Threats</h3>
+          <p className="text-xs text-muted-foreground">Types that hit the most of your team</p>
+          <ThreatScore slots={slots} />
+        </Card>
+
+        <Card className="p-4 space-y-2">
+          <h3 className="font-bold text-sm">Speed Tiers</h3>
+          <SpeedTiers slots={slots} />
+        </Card>
+      </div>
     </div>
   );
 }
@@ -630,8 +630,7 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
 
   return (
     <div className="grid gap-6 xl:grid-cols-2">
-      <section className="space-y-4">
-        {/* View toggle */}
+      <section className="space-y-4">        {/* View toggle */}
         <div className="flex items-center gap-2">
           <button onClick={() => setView("list")}
             className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-colors ${view === "list" ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}>
@@ -721,8 +720,8 @@ export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget
         )}
       </section>
 
-      {/* ── TEAM BUILDER SIDEBAR ── */}
-      <aside>
+      {/* ── TEAM BUILDER — full width, internally split ── */}
+      <aside className="xl:col-span-2">
         <div className="sticky top-[100px]">
           <TeamBuilder
             slots={slots}
