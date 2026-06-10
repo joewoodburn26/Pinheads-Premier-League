@@ -2,48 +2,124 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: 224 28% 7%;
-  --foreground: 210 40% 96%;
-  --card: 224 24% 11%;
-  --card-foreground: 210 40% 96%;
-  --border: 220 18% 22%;
-  --muted: 222 20% 15%;
-  --muted-foreground: 217 14% 68%;
-  --primary: 204 94% 60%;
-  --primary-foreground: 222 47% 11%;
-  --accent: 45 97% 55%;
-  --accent-foreground: 222 47% 11%;
-}
-
-* {
-  border-color: hsl(var(--border));
-}
-
-body {
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at 10% 0%, rgba(59, 130, 246, .18), transparent 32rem),
-    radial-gradient(circle at 90% 20%, rgba(250, 204, 21, .12), transparent 28rem),
-    hsl(var(--background));
-  color: hsl(var(--foreground));
-}
-
-a {
-  color: inherit;
-}
-
-.rich-content p {
-  margin-bottom: .75rem;
-}
-
-.rich-content ul {
-  list-style: disc;
-  margin-left: 1.25rem;
-}
-
 @layer base {
+  :root {
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+    --card: 224 71% 4%;
+    --card-foreground: 213 31% 91%;
+    --popover: 224 71% 4%;
+    --popover-foreground: 213 31% 91%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 1.2%;
+    --secondary: 222.2 47.4% 11.2%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 223 47% 11%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+    --accent: 216 34% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+    --ring: 216 34% 17%;
+    --radius: 0.5rem;
+  }
+
   body {
     font-family: var(--font-body), sans-serif;
   }
+}
+
+/* ── Page theme: Homepage — Crimson & Gold ──────────────────────────────── */
+.theme-home {
+  --theme-primary:   #DC2626;
+  --theme-secondary: #D97706;
+  --theme-glow:      rgba(220, 38, 38, 0.15);
+  --theme-glow-2:    rgba(217, 119, 6, 0.1);
+}
+
+/* ── Page theme: Settings — Gray & White ───────────────────────────────── */
+.theme-settings {
+  --theme-primary:   #94A3B8;
+  --theme-secondary: #F1F5F9;
+  --theme-glow:      rgba(148, 163, 184, 0.1);
+  --theme-glow-2:    rgba(241, 245, 249, 0.05);
+}
+
+/* ── Page theme: League pages (Teams/Rosters/Draft) — Green & Silver ────── */
+.theme-league {
+  --theme-primary:   #16A34A;
+  --theme-secondary: #94A3B8;
+  --theme-glow:      rgba(22, 163, 74, 0.15);
+  --theme-glow-2:    rgba(148, 163, 184, 0.08);
+}
+
+/* ── Theme utility classes ──────────────────────────────────────────────── */
+.theme-accent {
+  color: var(--theme-primary);
+}
+.theme-accent-2 {
+  color: var(--theme-secondary);
+}
+.theme-accent-bg {
+  background-color: var(--theme-primary);
+}
+.theme-accent-border {
+  border-color: var(--theme-primary);
+}
+.theme-glow-bg {
+  background: radial-gradient(ellipse at top, var(--theme-glow) 0%, transparent 60%),
+              radial-gradient(ellipse at bottom right, var(--theme-glow-2) 0%, transparent 50%);
+}
+
+/* ── Pokéball watermark pattern ─────────────────────────────────────────── */
+.pokeball-bg {
+  position: relative;
+  overflow: hidden;
+}
+.pokeball-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 50% 50%,
+      transparent 28%,
+      rgba(255,255,255,0.03) 28%,
+      rgba(255,255,255,0.03) 32%,
+      transparent 32%
+    ),
+    radial-gradient(circle at 50% 50%,
+      rgba(255,255,255,0.02) 45%,
+      transparent 45%
+    );
+  background-size: 120px 120px;
+  background-position: center;
+  pointer-events: none;
+  z-index: 0;
+}
+.pokeball-bg > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Team accent colors ──────────────────────────────────────────────────── */
+.team-fairy    { --team-color: #D685AD; --team-glow: rgba(214,133,173,0.2); }
+.team-dark     { --team-color: #705746; --team-glow: rgba(112,87,70,0.25);  }
+.team-steel    { --team-color: #B7B7CE; --team-glow: rgba(183,183,206,0.2); }
+.team-flying   { --team-color: #A98FF3; --team-glow: rgba(169,143,243,0.2); }
+.team-fire     { --team-color: #EE8130; --team-glow: rgba(238,129,48,0.2);  }
+.team-water    { --team-color: #6390F0; --team-glow: rgba(99,144,240,0.2);  }
+.team-normal   { --team-color: #D685AD; --team-glow: rgba(214,133,173,0.2); }
+
+.team-card-accent {
+  border-top: 3px solid var(--team-color);
+  box-shadow: 0 0 20px var(--team-glow), 0 4px 6px rgba(0,0,0,0.3);
+}
+.team-card-accent:hover {
+  box-shadow: 0 0 35px var(--team-glow), 0 8px 15px rgba(0,0,0,0.4);
+  transform: translateY(-3px);
+}
+.team-name-color {
+  color: var(--team-color);
 }
