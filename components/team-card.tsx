@@ -23,48 +23,79 @@ export function TeamCard({ team, topPokemon }: { team: Team; topPokemon?: Pokemo
 
   return (
     <Link href={`/teams/${team.id}`} className="block">
-      <Card className={`team-card-accent ${accentClass} relative overflow-hidden p-5 transition-all duration-300 cursor-pointer`}>
+      <Card className={`team-card-accent ${accentClass} relative aspect-square overflow-hidden p-0 transition-all duration-300 cursor-pointer flex flex-col`}>
+
+        {/* Top Pokémon watermark */}
         {topPokemon && (
-          <div className="absolute -right-2 -top-2 opacity-15 pointer-events-none">
-            <Image src={topPokemon.spriteUrl} alt="" width={100} height={100} className="size-24 object-contain" />
+          <div className="absolute -right-2 -top-2 opacity-10 pointer-events-none z-0">
+            <Image src={topPokemon.spriteUrl} alt="" width={120} height={120} className="size-28 object-contain" />
           </div>
         )}
 
-        <div className="grid grid-cols-[auto_1fr_auto] gap-4 items-start">
-          <div className="flex flex-row items-center gap-2">
-            <div className="grid size-20 place-items-center rounded-lg border bg-muted text-xl font-black">
-              {team.logoUrl
-                ? <Image src={`${team.logoUrl}?v=${Date.now()}`} alt="" width={80} height={80} className="size-20 object-contain rounded-lg" unoptimized />
-                : <span className="text-lg">{initials(team.teamName)}</span>
-              }
-            </div>
-            <div className="grid size-12 place-items-center overflow-hidden rounded-full border bg-background text-muted-foreground">
-              {team.coach?.imageUrl
-                ? <Image src={`${team.coach.imageUrl}?v=${Date.now()}`} alt="" width={48} height={48} className="size-12 object-cover" unoptimized />
-                : <User size={18} />
-              }
-            </div>
+        {/* Team name — full width at top */}
+        <div className="relative z-10 px-3 pt-3 pb-1">
+          <h2 className="team-name-color text-lg font-black leading-tight line-clamp-2">
+            {team.teamName}
+          </h2>
+          <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider truncate">
+            {team.coach?.name ?? "Unassigned"}
+          </p>
+        </div>
+
+        {/* Images row — logo + coach side by side, fill width */}
+        <div className="relative z-10 flex flex-1 gap-2 px-3 pb-2 min-h-0">
+          {/* Team logo — fills available space, no letterbox */}
+          <div className="flex-1 relative overflow-hidden rounded-lg border min-h-0"
+            style={{ borderColor: "var(--team-color, #666)", opacity: 0.9 }}>
+            {team.logoUrl ? (
+              <Image
+                src={`${team.logoUrl}?v=${Date.now()}`}
+                alt={team.teamName}
+                fill
+                className="object-cover"
+                unoptimized
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-muted text-2xl font-black">
+                {initials(team.teamName)}
+              </div>
+            )}
           </div>
 
-          <div className="min-w-0 flex flex-col justify-center gap-1 pt-1">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              {team.coach?.name ?? "Unassigned Coach"}
-            </p>
-            <h2 className="team-name-color text-xl font-black leading-tight truncate">{team.teamName}</h2>
-            <p className="text-2xl font-black tabular-nums">
-              {team.wins}
-              <span className="text-muted-foreground font-normal text-base mx-1">–</span>
-              {team.losses}
-            </p>
+          {/* Coach photo — square, fills height */}
+          <div className="relative overflow-hidden rounded-lg border aspect-square self-stretch"
+            style={{ borderColor: "var(--team-color, #666)", opacity: 0.9 }}>
+            {team.coach?.imageUrl ? (
+              <Image
+                src={`${team.coach.imageUrl}?v=${Date.now()}`}
+                alt={team.coach?.name ?? ""}
+                fill
+                className="object-cover"
+                unoptimized
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-muted text-muted-foreground">
+                <User size={24} />
+              </div>
+            )}
           </div>
+        </div>
 
+        {/* Bottom row — record + top Pokémon pts */}
+        <div className="relative z-10 flex items-center justify-between px-3 pb-3">
+          <p className="text-2xl font-black tabular-nums">
+            {team.wins}
+            <span className="text-muted-foreground font-normal text-base mx-1">–</span>
+            {team.losses}
+          </p>
           {topPokemon && (
-            <div className="flex flex-col items-center gap-1 pt-1">
-              <Image src={topPokemon.spriteUrl} alt={topPokemon.name} width={56} height={56} className="size-14 object-contain drop-shadow-md" />
+            <div className="flex items-center gap-1.5">
+              <Image src={topPokemon.spriteUrl} alt={topPokemon.name} width={36} height={36} className="size-8 object-contain drop-shadow-md" />
               <p className="text-xs font-bold team-name-color">{topPokemon.pointValue}pts</p>
             </div>
           )}
         </div>
+
       </Card>
     </Link>
   );
