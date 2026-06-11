@@ -26,59 +26,47 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
 
   return (
     <>
-      {/* Full-page background gradient injected via a fixed element so it
-          covers the entire viewport with no hard cutoff line */}
-      <div
-        className="fixed inset-0 -z-10 pointer-events-none"
+      <div className="fixed inset-0 -z-10 pointer-events-none"
         style={{
           background: `
             radial-gradient(ellipse 80% 50% at 10% 0%, rgba(${rgb1}, 0.1) 0%, transparent 55%),
             radial-gradient(ellipse 60% 40% at 90% 100%, rgba(${rgb2}, 0.07) 0%, transparent 50%),
-            hsl(224, 71%, 4%)
+            hsl(220, 20%, 10%)
           `,
         }}
       />
 
       <div className="space-y-8">
-        {/* ── Team Header ────────────────────────────────────────────────── */}
-        <section
-          className="relative overflow-hidden rounded-xl border p-6"
+        <section className="relative overflow-hidden rounded-xl border p-6"
           style={{
             background: `linear-gradient(135deg, rgba(${rgb1}, 0.1) 0%, rgba(${rgb2}, 0.05) 100%)`,
             borderColor: `rgba(${rgb1}, 0.25)`,
             boxShadow: `0 0 40px rgba(${rgb1}, 0.08)`,
           }}
         >
-          {/* Colored bar at top of header */}
-          <div
-            className="absolute top-0 left-0 right-0 h-1 rounded-t-xl"
-            style={{ background: `linear-gradient(90deg, ${color}, ${secondColor})` }}
-          />
+          <div className="absolute top-0 left-0 right-0 h-1 rounded-t-xl"
+            style={{ background: `linear-gradient(90deg, ${color}, ${secondColor})` }} />
 
           <div className="grid gap-6 sm:grid-cols-[160px_1fr]">
-            {/* Logo + coach */}
             <div className="flex flex-row gap-4 sm:flex-col">
-              <div
-                className="grid size-32 place-items-center rounded-lg border text-3xl font-black"
+              <div className="grid size-32 place-items-center rounded-lg border text-3xl font-black"
                 style={{ borderColor: `rgba(${rgb1}, 0.35)`, background: `rgba(${rgb1}, 0.06)` }}
               >
                 {team.logoUrl
-                  ? <Image src={team.logoUrl} alt="" width={128} height={128} className="size-32 object-contain rounded-lg" />
+                  ? <Image src={`${team.logoUrl}?v=${Date.now()}`} alt="" width={128} height={128} className="size-32 object-contain rounded-lg" unoptimized />
                   : initials(team.teamName)
                 }
               </div>
-              <div
-                className="grid size-24 place-items-center overflow-hidden rounded-full border bg-background text-muted-foreground"
+              <div className="grid size-24 place-items-center overflow-hidden rounded-full border bg-background text-muted-foreground"
                 style={{ borderColor: `rgba(${rgb1}, 0.25)` }}
               >
                 {team.coach?.imageUrl
-                  ? <Image src={team.coach.imageUrl} alt="" width={96} height={96} className="size-24 object-cover" />
+                  ? <Image src={`${team.coach.imageUrl}?v=${Date.now()}`} alt="" width={96} height={96} className="size-24 object-cover" unoptimized />
                   : <User size={36} />
                 }
               </div>
             </div>
 
-            {/* Info */}
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground">Team Name</p>
@@ -96,10 +84,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
                 <p className="mb-2 text-sm text-muted-foreground">Bio</p>
                 <InlineEdit value={team.coach?.bio ?? ""} name="bio" multiline action={updateCoachBio.bind(null, team.coachId, team.id)} />
               </div>
-              <Card
-                className="space-y-3 p-4 text-sm text-muted-foreground"
-                style={{ borderColor: `rgba(${rgb1}, 0.2)` }}
-              >
+              <Card className="space-y-3 p-4 text-sm text-muted-foreground" style={{ borderColor: `rgba(${rgb1}, 0.2)` }}>
                 <div>
                   <p className="mb-2 font-semibold text-foreground">Team Logo</p>
                   <ImageUploadForm targetId={team.id} kind="team-logo" />
@@ -113,7 +98,6 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
           </div>
         </section>
 
-        {/* ── Roster ─────────────────────────────────────────────────────── */}
         <section className="space-y-4">
           <h2 className="text-2xl font-black" style={{ color }}>Roster</h2>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
