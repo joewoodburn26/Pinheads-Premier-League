@@ -23,102 +23,56 @@ export function TeamCard({ team, topPokemon }: { team: Team; topPokemon?: Pokemo
 
   return (
     <Link href={`/teams/${team.id}`} className="block">
-      <Card className={`team-card-accent ${accentClass} relative overflow-hidden transition-all duration-300 cursor-pointer`}
-        style={{ aspectRatio: "3 / 4" }}>
+      <Card className={`team-card-accent ${accentClass} relative overflow-hidden p-5 transition-all duration-300 cursor-pointer`}>
 
-        {/* Background — team logo fills entire card */}
-        <div className="absolute inset-0 z-0">
-          {team.logoUrl ? (
-            <Image
-              src={`${team.logoUrl}?v=${Date.now()}`}
-              alt={team.teamName}
-              fill
-              className="object-cover"
-              unoptimized
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center bg-muted text-4xl font-black text-muted-foreground">
-              {initials(team.teamName)}
-            </div>
-          )}
-          {/* Dark overlay so text is readable */}
-          <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/20 to-background/80" />
-        </div>
-
-        {/* Team name strip — top */}
-        <div className="absolute top-0 left-0 right-0 z-10 px-3 pt-2 pb-1">
-          <h2 className="team-name-color text-base font-black leading-tight line-clamp-1">
-            {team.teamName}
-          </h2>
-          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold truncate">
-            {team.coach?.name ?? "Unassigned"}
-          </p>
-        </div>
-
-        {/* Middle row — team logo (yellow) left, Pokémon sprite (blue) right */}
-        <div className="absolute z-10 flex items-start justify-between px-2 gap-2"
-          style={{ top: "52px", left: 0, right: 0 }}>
-
-          {/* YELLOW — team logo square */}
-          <div className="relative overflow-hidden rounded-lg border-2 bg-background/60 flex-shrink-0"
-            style={{
-              width: "38%",
-              aspectRatio: "1 / 1",
-              borderColor: "var(--team-color, #888)",
-            }}>
-            {team.logoUrl ? (
-              <Image
-                src={`${team.logoUrl}?v=${Date.now()}`}
-                alt={team.teamName}
-                fill
-                className="object-contain p-1"
-                unoptimized
-              />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center text-xl font-black">
-                {initials(team.teamName)}
-              </div>
-            )}
-          </div>
-
-          {/* BLUE — top Pokémon sprite square */}
-          <div className="relative overflow-hidden rounded-lg border-2 bg-background/60 flex-shrink-0"
-            style={{
-              width: "38%",
-              aspectRatio: "1 / 1",
-              borderColor: "var(--team-color, #888)",
-            }}>
-            {topPokemon ? (
-              <Image
-                src={topPokemon.spriteUrl}
-                alt={topPokemon.name}
-                fill
-                className="object-contain p-1"
-              />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                <User size={20} />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* GREEN — standings bottom-left */}
-        <div className="absolute z-10 bottom-2 left-2 rounded-lg bg-background/70 backdrop-blur-sm px-3 py-1.5">
-          <p className="text-xl font-black tabular-nums leading-none">
-            {team.wins}
-            <span className="text-muted-foreground font-normal text-sm mx-1">–</span>
-            {team.losses}
-          </p>
-        </div>
-
-        {/* Top Pokémon points — bottom right */}
+        {/* Top Pokémon sprite watermark */}
         {topPokemon && (
-          <div className="absolute z-10 bottom-2 right-2">
-            <p className="text-sm font-bold team-name-color">{topPokemon.pointValue}pts</p>
+          <div className="absolute -right-2 -top-2 opacity-15 pointer-events-none">
+            <Image src={topPokemon.spriteUrl} alt="" width={100} height={100} className="size-24 object-contain" />
           </div>
         )}
 
+        <div className="grid grid-cols-[auto_1fr_auto] gap-4 items-start">
+          {/* Left: team logo + coach photo */}
+          <div className="flex flex-col items-center gap-2">
+            <div className="grid size-20 place-items-center rounded-lg border bg-muted text-xl font-black">
+              {team.logoUrl
+                ? <Image src={`${team.logoUrl}?v=${Date.now()}`} alt="" width={80} height={80} className="size-20 object-contain rounded-lg" unoptimized />
+                : <span className="text-lg">{initials(team.teamName)}</span>
+              }
+            </div>
+            <div className="grid size-12 place-items-center overflow-hidden rounded-full border bg-background text-muted-foreground">
+              {team.coach?.imageUrl
+                ? <Image src={`${team.coach.imageUrl}?v=${Date.now()}`} alt="" width={48} height={48} className="size-12 object-cover" unoptimized />
+                : <User size={18} />
+              }
+            </div>
+          </div>
+
+          {/* Middle: team info */}
+          <div className="min-w-0 flex flex-col justify-center gap-1 pt-1">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider truncate">
+              {team.coach?.name ?? "Unassigned Coach"}
+            </p>
+            {/* Team name — larger, wraps to 2 lines so full name is visible */}
+            <h2 className="team-name-color text-lg font-black leading-tight break-words hyphens-auto">
+              {team.teamName}
+            </h2>
+            <p className="mt-2 text-2xl font-black tabular-nums">
+              {team.wins}
+              <span className="text-muted-foreground font-normal text-base mx-1">–</span>
+              {team.losses}
+            </p>
+          </div>
+
+          {/* Right: top Pokémon sprite */}
+          {topPokemon && (
+            <div className="flex flex-col items-center gap-1 pt-1">
+              <Image src={topPokemon.spriteUrl} alt={topPokemon.name} width={56} height={56} className="size-14 object-contain drop-shadow-md" />
+              <p className="text-xs font-bold team-name-color">{topPokemon.pointValue}pts</p>
+            </div>
+          )}
+        </div>
       </Card>
     </Link>
   );
