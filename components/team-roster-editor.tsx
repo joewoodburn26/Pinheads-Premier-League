@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useTransition, useMemo, useRef } from "react";
+import { useState, useTransition, useMemo, useRef, useEffect } from "react";
 import type { Pokemon, TeamPokemon } from "@/lib/types";
 import { TypeBadge } from "@/components/type-badge";
 import { pokemonTypesFor } from "@/lib/type-chart";
@@ -59,7 +59,7 @@ function PokemonSelectorModal({
   );
 }
 
-// ── Single Pokémon slot cell (with drag handles) ──────────────────────────────
+// ── Single Pokémon slot cell ──────────────────────────────────────────────────
 
 function PokemonSlotCell({
   slot, allPokemon, isDragOver, onDragStart, onDragOver, onDragEnd, onDrop,
@@ -102,17 +102,13 @@ function PokemonSlotCell({
           ${isDragOver ? "border-primary border-2 bg-primary/10 scale-105" : "hover:border-primary/40"}
         `}
       >
-        {/* Drag indicator */}
         <div className="absolute top-1 left-1 text-muted-foreground/40 text-xs select-none">⠿</div>
-
-        {/* Action buttons */}
         <div className="absolute top-1 right-1 flex gap-1">
           <button onClick={() => setShowSelector(true)} title="Replace Pokémon"
             className="rounded bg-muted px-1.5 py-0.5 text-xs hover:bg-primary hover:text-primary-foreground transition-colors">↔</button>
           <button onClick={handleRemove} title="Remove Pokémon"
             className="rounded bg-muted px-1.5 py-0.5 text-xs hover:bg-destructive hover:text-destructive-foreground transition-colors">✕</button>
         </div>
-
         <Image src={pokemon.spriteUrl} alt={pokemon.name} width={96} height={96} className="size-20 object-contain mt-2" />
         <p className="text-sm font-semibold leading-tight">{pokemon.name}</p>
         <div className="flex flex-wrap justify-center gap-0.5">
@@ -120,7 +116,6 @@ function PokemonSlotCell({
         </div>
         <p className="mt-auto pt-2 text-lg font-black text-foreground">{pokemon.pointValue} pts</p>
       </div>
-
       {showSelector && (
         <PokemonSelectorModal allPokemon={allPokemon} onSelect={handleReplace} onClose={() => setShowSelector(false)} />
       )}
@@ -154,16 +149,12 @@ function EmptySlotCell({
         className={`flex h-full min-h-[180px] w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed transition-colors
           ${isDragOver ? "border-primary bg-primary/10 border-2 scale-105" : "bg-muted/40"}`}
       >
-        <button
-          onClick={() => setShowSelector(true)}
-          disabled={isPending}
-          className="flex h-full min-h-[180px] w-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-        >
+        <button onClick={() => setShowSelector(true)} disabled={isPending}
+          className="flex h-full min-h-[180px] w-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
           <span className="text-2xl">+</span>
           <span>Add Pokémon</span>
         </button>
       </div>
-
       {showSelector && (
         <PokemonSelectorModal allPokemon={allPokemon} onSelect={handleAdd} onClose={() => setShowSelector(false)} />
       )}
@@ -171,7 +162,7 @@ function EmptySlotCell({
   );
 }
 
-// ── Team roster editor with drag and drop ─────────────────────────────────────
+// ── Team roster editor ────────────────────────────────────────────────────────
 
 export function TeamRosterEditor({
   teamId, seasonId, slots, allPokemon,
@@ -181,14 +172,16 @@ export function TeamRosterEditor({
   slots: (TeamPokemon & { pokemon?: Pokemon })[];
   allPokemon: Pokemon[];
 }) {
-  // Local state for optimistic reordering
+  // Sync local slots with incoming prop whenever server data refreshes
   const [localSlots, setLocalSlots] = useState(slots);
   const [isPending, startTransition] = useTransition();
   const dragIndexRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  // Keep in sync when server data changes
-  useState(() => { setLocalSlots(slots); });
+  // Keep local state in sync with server data after revalidation
+  useEffect(() => {
+    setLocalSlots(slots);
+  }, [slots]);
 
   const padded = Array.from({ length: 10 }, (_, i) => localSlots[i] ?? null);
   const totalPoints = localSlots.reduce((sum, s) => sum + (s.pokemon?.pointValue ?? 0), 0);
@@ -214,11 +207,8 @@ export function TeamRosterEditor({
       return;
     }
 
-    // Reorder locally first (optimistic update)
     const newSlots = [...localSlots];
     const draggedSlot = newSlots[dragIndex];
-
-    // Handle drop on empty slot or filled slot
     if (draggedSlot) {
       newSlots.splice(dragIndex, 1);
       newSlots.splice(dropIndex, 0, draggedSlot);
@@ -228,7 +218,6 @@ export function TeamRosterEditor({
     setDragOverIndex(null);
     dragIndexRef.current = null;
 
-    // Save to database
     const orderedIds = newSlots
       .filter((s): s is TeamPokemon & { pokemon?: Pokemon } => s !== null)
       .map((s) => s.id);
@@ -267,10 +256,8 @@ export function TeamRosterEditor({
           )
         )}
       </div>
-
-      {/* Points total */}
       <div className={`flex items-center justify-end gap-3 rounded-lg border px-4 py-2 transition-colors ${isPending ? "bg-muted/20" : "bg-muted/40"}`}>
-        {isPending && <span className="text-xs text-muted-foreground">Saving order…</span>}
+        {isPending && <span className="text-xs text-muted-foreground">Saving…</span>}
         <span className="text-sm text-muted-foreground">Total Points Used:</span>
         <span className={`text-2xl font-black ${totalPoints > 105 ? "text-red-500" : "text-foreground"}`}>
           {totalPoints}
