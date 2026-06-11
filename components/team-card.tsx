@@ -24,20 +24,10 @@ export function TeamCard({ team, topPokemon }: { team: Team; topPokemon?: Pokemo
   return (
     <Link href={`/teams/${team.id}`} className="block">
       <Card className={`team-card-accent ${accentClass} relative overflow-hidden transition-all duration-300 cursor-pointer`}
-        style={{ aspectRatio: "1 / 1" }}>
+        style={{ aspectRatio: "3 / 4" }}>
 
-        {/* ── BLUE — team name strip across the top ── */}
-        <div className="absolute top-0 left-0 right-0 z-10 px-3 py-2 bg-background/70 backdrop-blur-sm">
-          <h2 className="team-name-color text-base font-black leading-tight line-clamp-1">
-            {team.teamName}
-          </h2>
-          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold truncate">
-            {team.coach?.name ?? "Unassigned"}
-          </p>
-        </div>
-
-        {/* ── RED — team logo fills right 65% of card ── */}
-        <div className="absolute top-0 right-0 bottom-0 z-0" style={{ left: "35%" }}>
+        {/* Background — team logo fills entire card */}
+        <div className="absolute inset-0 z-0">
           {team.logoUrl ? (
             <Image
               src={`${team.logoUrl}?v=${Date.now()}`}
@@ -51,36 +41,70 @@ export function TeamCard({ team, topPokemon }: { team: Team; topPokemon?: Pokemo
               {initials(team.teamName)}
             </div>
           )}
-          {/* Fade on left edge so it blends into left column */}
-          <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-transparent" />
+          {/* Dark overlay so text is readable */}
+          <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/20 to-background/80" />
         </div>
 
-        {/* ── YELLOW — coach photo, top-left square ── */}
-        <div className="absolute z-10 overflow-hidden rounded-lg border-2"
-          style={{
-            top: "42px",
-            left: "8px",
-            width: "calc(35% - 16px)",
-            aspectRatio: "1 / 1",
-            borderColor: "var(--team-color, #888)",
-          }}>
-          {team.coach?.imageUrl ? (
-            <Image
-              src={`${team.coach.imageUrl}?v=${Date.now()}`}
-              alt={team.coach?.name ?? ""}
-              fill
-              className="object-cover"
-              unoptimized
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center bg-muted text-muted-foreground">
-              <User size={20} />
-            </div>
-          )}
+        {/* Team name strip — top */}
+        <div className="absolute top-0 left-0 right-0 z-10 px-3 pt-2 pb-1">
+          <h2 className="team-name-color text-base font-black leading-tight line-clamp-1">
+            {team.teamName}
+          </h2>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold truncate">
+            {team.coach?.name ?? "Unassigned"}
+          </p>
         </div>
 
-        {/* ── GREEN — record, bottom-left square ── */}
-        <div className="absolute z-10 bottom-2 left-2 rounded-lg bg-background/70 backdrop-blur-sm px-3 py-2">
+        {/* Middle row — team logo (yellow) left, Pokémon sprite (blue) right */}
+        <div className="absolute z-10 flex items-start justify-between px-2 gap-2"
+          style={{ top: "52px", left: 0, right: 0 }}>
+
+          {/* YELLOW — team logo square */}
+          <div className="relative overflow-hidden rounded-lg border-2 bg-background/60 flex-shrink-0"
+            style={{
+              width: "38%",
+              aspectRatio: "1 / 1",
+              borderColor: "var(--team-color, #888)",
+            }}>
+            {team.logoUrl ? (
+              <Image
+                src={`${team.logoUrl}?v=${Date.now()}`}
+                alt={team.teamName}
+                fill
+                className="object-contain p-1"
+                unoptimized
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center text-xl font-black">
+                {initials(team.teamName)}
+              </div>
+            )}
+          </div>
+
+          {/* BLUE — top Pokémon sprite square */}
+          <div className="relative overflow-hidden rounded-lg border-2 bg-background/60 flex-shrink-0"
+            style={{
+              width: "38%",
+              aspectRatio: "1 / 1",
+              borderColor: "var(--team-color, #888)",
+            }}>
+            {topPokemon ? (
+              <Image
+                src={topPokemon.spriteUrl}
+                alt={topPokemon.name}
+                fill
+                className="object-contain p-1"
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                <User size={20} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* GREEN — standings bottom-left */}
+        <div className="absolute z-10 bottom-2 left-2 rounded-lg bg-background/70 backdrop-blur-sm px-3 py-1.5">
           <p className="text-xl font-black tabular-nums leading-none">
             {team.wins}
             <span className="text-muted-foreground font-normal text-sm mx-1">–</span>
@@ -88,11 +112,10 @@ export function TeamCard({ team, topPokemon }: { team: Team; topPokemon?: Pokemo
           </p>
         </div>
 
-        {/* Top Pokémon — bottom right */}
+        {/* Top Pokémon points — bottom right */}
         {topPokemon && (
-          <div className="absolute z-10 bottom-2 right-2 flex flex-col items-center">
-            <Image src={topPokemon.spriteUrl} alt={topPokemon.name} width={36} height={36} className="size-9 object-contain drop-shadow-md" />
-            <p className="text-xs font-bold team-name-color">{topPokemon.pointValue}pts</p>
+          <div className="absolute z-10 bottom-2 right-2">
+            <p className="text-sm font-bold team-name-color">{topPokemon.pointValue}pts</p>
           </div>
         )}
 
