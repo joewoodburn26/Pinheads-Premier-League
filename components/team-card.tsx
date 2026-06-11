@@ -31,7 +31,7 @@ export function TeamCard({ team, topPokemon }: { team: Team; topPokemon?: Pokemo
         )}
 
         <div className="grid grid-cols-[auto_1fr_auto] gap-4 items-start">
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-row items-center gap-2">
             <div className="grid size-20 place-items-center rounded-lg border bg-muted text-xl font-black">
               {team.logoUrl
                 ? <Image src={`${team.logoUrl}?v=${Date.now()}`} alt="" width={80} height={80} className="size-20 object-contain rounded-lg" unoptimized />
