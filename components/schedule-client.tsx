@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
-import { ExternalLink, Save, Trophy, ChevronUp, ChevronDown } from "lucide-react";
+import { ExternalLink, Save, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
