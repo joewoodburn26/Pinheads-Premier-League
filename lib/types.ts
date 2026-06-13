@@ -63,6 +63,7 @@ export type ScheduleMatch = {
   bo3Score?: string | null;
   homeDiff?: number;
   awayDiff?: number;
+  isBye?: boolean;
   replay1: string | null;
   replay2: string | null;
   replay3: string | null;

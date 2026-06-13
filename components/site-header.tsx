@@ -5,27 +5,24 @@ import { ChevronDown } from "lucide-react";
 import type { Season, Team } from "@/lib/types";
 
 const nav = [
-  ["Standings", "/standings"],
   ["Schedule", "/schedule"],
-  ["Rosters", "/rosters"],
-  ["Draft", "/draft"],
-  ["Type Chart", "/type-chart"],
-  ["Calculator", "/damage-calculator"],
-  ["Stats", "/stats"],
-  ["Rules", "/rules"],
-  ["Seasons", "/seasons"],
+  ["Rosters",  "/rosters"],
+  ["Draft",    "/draft"],
+  ["Type Chart",   "/type-chart"],
+  ["Calculator",   "/damage-calculator"],
+  ["Stats",        "/stats"],
+  ["Rules",        "/rules"],
+  ["Seasons",      "/seasons"],
 ];
 
 const settingsNav = [
-  ["Point Restructure",  "/settings/point-restructure"],
-  ["Team Management",    "/settings/team-management"],
-  ["Season Management",  "/settings/seasons"],
+  ["Point Restructure", "/settings/point-restructure"],
+  ["Team Management",   "/settings/team-management"],
+  ["Season Management", "/settings/seasons"],
 ];
 
 export function SiteHeader({
-  seasons,
-  activeSeason,
-  teams,
+  seasons, activeSeason, teams,
 }: {
   seasons: Season[];
   activeSeason?: Season;
@@ -37,17 +34,10 @@ export function SiteHeader({
         <Link href="/" className="text-xl font-black tracking-wide">
           Pinheads Draft
         </Link>
-
         <nav className="ml-auto flex flex-wrap items-center justify-end gap-2 text-sm">
-          {/* Season selector */}
-          <select
-            className="h-9 rounded-md border bg-muted px-2 text-sm"
-            defaultValue={activeSeason?.id}
-          >
-            {seasons.map((season) => (
-              <option key={season.id} value={season.id}>
-                {season.name}
-              </option>
+          <select className="h-9 rounded-md border bg-muted px-2 text-sm" defaultValue={activeSeason?.id}>
+            {seasons.map(season => (
+              <option key={season.id} value={season.id}>{season.name}</option>
             ))}
           </select>
 
@@ -57,12 +47,8 @@ export function SiteHeader({
               Teams <ChevronDown size={14} />
             </button>
             <div className="invisible absolute right-0 top-9 w-56 rounded-md border bg-card p-1 opacity-0 shadow-lg transition group-hover:visible group-hover:opacity-100">
-              {teams.map((team) => (
-                <Link
-                  key={team.id}
-                  href={`/teams/${team.id}`}
-                  className="block rounded px-3 py-2 hover:bg-muted"
-                >
+              {teams.map(team => (
+                <Link key={team.id} href={`/teams/${team.id}`} className="block rounded px-3 py-2 hover:bg-muted">
                   {team.teamName}
                 </Link>
               ))}
@@ -76,24 +62,16 @@ export function SiteHeader({
             </button>
             <div className="invisible absolute right-0 top-9 w-56 rounded-md border bg-card p-1 opacity-0 shadow-lg transition group-hover:visible group-hover:opacity-100">
               {settingsNav.map(([label, href]) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className="block rounded px-3 py-2 hover:bg-muted"
-                >
+                <Link key={href} href={href} className="block rounded px-3 py-2 hover:bg-muted">
                   {label}
                 </Link>
               ))}
             </div>
           </div>
 
-          {/* Regular nav links */}
+          {/* Regular nav */}
           {nav.map(([label, href]) => (
-            <Link
-              key={href}
-              href={href}
-              className="rounded-md px-3 py-2 hover:bg-muted"
-            >
+            <Link key={href} href={href} className="rounded-md px-3 py-2 hover:bg-muted">
               {label}
             </Link>
           ))}
