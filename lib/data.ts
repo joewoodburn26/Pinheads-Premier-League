@@ -75,7 +75,11 @@ export async function getPokemon() {
 export async function getRoster(teamId: string) {
   if (!hasSupabaseEnv()) return teamPokemon.filter((slot) => slot.teamId === teamId);
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.from("team_pokemon").select("*, pokemon(*)").eq("team_id", teamId).order("slot_order", { ascending: true });
+  const { data } = await supabase
+    .from("team_pokemon")
+    .select("*, pokemon(*)")
+    .eq("team_id", teamId)
+    .order("slot_order", { ascending: true });
   return (data ?? []).map((row) => ({
     id: row.id,
     seasonId: row.season_id,
@@ -108,7 +112,11 @@ export async function getRoster(teamId: string) {
 export async function getSchedule(seasonId: string) {
   if (!hasSupabaseEnv()) return schedule.filter((match) => match.seasonId === seasonId);
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.from("schedule_matches").select("*").eq("season_id", seasonId).order("week");
+  const { data } = await supabase
+    .from("schedule_matches")
+    .select("*")
+    .eq("season_id", seasonId)
+    .order("week");
   return (data ?? []).map((row) => ({
     id: row.id,
     seasonId: row.season_id,
@@ -116,6 +124,9 @@ export async function getSchedule(seasonId: string) {
     homeTeam: row.home_team,
     awayTeam: row.away_team,
     winner: row.winner,
+    bo3Score: row.bo3_score ?? null,
+    homeDiff: row.home_diff ?? 0,
+    awayDiff: row.away_diff ?? 0,
     replay1: row.replay_1,
     replay2: row.replay_2,
     replay3: row.replay_3
@@ -165,7 +176,6 @@ export async function getStats(seasonId?: string) {
 
 export async function getRules() {
   const fallback = rulesHtml;
-
   if (!hasSupabaseEnv()) return fallback;
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.from("league_rules").select("content").eq("id", "default").single();

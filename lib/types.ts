@@ -60,6 +60,9 @@ export type ScheduleMatch = {
   homeTeam: string;
   awayTeam: string;
   winner: string | null;
+  bo3Score: string | null;
+  homeDiff: number;
+  awayDiff: number;
   replay1: string | null;
   replay2: string | null;
   replay3: string | null;

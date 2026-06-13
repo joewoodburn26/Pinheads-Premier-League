@@ -52,14 +52,7 @@ export async function duplicateSeason(formData: FormData) {
   for (const team of teams ?? []) {
     const { data: inserted } = await supabase
       .from("teams")
-      .insert({
-        season_id: season.id,
-        coach_id: team.coach_id,
-        team_name: team.team_name,
-        logo_url: team.logo_url,
-        wins: 0,
-        losses: 0
-      })
+      .insert({ season_id: season.id, coach_id: team.coach_id, team_name: team.team_name, logo_url: team.logo_url, wins: 0, losses: 0 })
       .select("id")
       .single();
     if (inserted) idMap.set(team.id, inserted.id);
@@ -72,7 +65,6 @@ export async function duplicateSeason(formData: FormData) {
       await supabase.from("team_pokemon").insert({ season_id: season.id, team_id: teamId, pokemon_id: slot.pokemon_id });
     }
   }
-
   revalidatePath("/seasons");
 }
 
@@ -87,7 +79,6 @@ export async function updateTeamName(teamId: string, formData: FormData) {
   const teamName = z.string().min(1).parse(formData.get("teamName"));
   await createSupabaseAdminClient().from("teams").update({ team_name: teamName }).eq("id", teamId);
   revalidatePath(`/teams/${teamId}`);
-  revalidatePath("/standings");
 }
 
 export async function updateCoachName(coachId: string, teamId: string, formData: FormData) {
@@ -95,7 +86,6 @@ export async function updateCoachName(coachId: string, teamId: string, formData:
   const name = z.string().min(1).parse(formData.get("coachName"));
   await createSupabaseAdminClient().from("coaches").update({ name }).eq("id", coachId);
   revalidatePath(`/teams/${teamId}`);
-  revalidatePath("/standings");
 }
 
 export async function updateCoachBio(coachId: string, teamId: string, formData: FormData) {
@@ -107,41 +97,43 @@ export async function updateCoachBio(coachId: string, teamId: string, formData: 
 
 export async function updateMatch(formData: FormData) {
   if (!hasSupabaseEnv()) return;
-  const id = z.string().min(1).parse(formData.get("id"));
-  const winner = (formData.get("winner") as string) || null;
+  const id       = z.string().min(1).parse(formData.get("id"));
+  const winner   = (formData.get("winner") as string) || null;
+  const bo3Score = (formData.get("bo3Score") as string) || null;
+  const homeDiff = parseInt(formData.get("homeDiff") as string) || 0;
+  const awayDiff = parseInt(formData.get("awayDiff") as string) || 0;
   const supabase = createSupabaseAdminClient();
 
-  // Get the existing match so we know the previous winner
   const { data: existingMatch } = await supabase
     .from("schedule_matches")
     .select("*")
     .eq("id", id)
     .single();
 
-  // Save the match result
   await supabase
     .from("schedule_matches")
     .update({
       winner,
+      bo3_score: bo3Score,
+      home_diff: homeDiff,
+      away_diff: awayDiff,
       replay_1: formData.get("replay1") || null,
       replay_2: formData.get("replay2") || null,
-      replay_3: formData.get("replay3") || null
+      replay_3: formData.get("replay3") || null,
     })
     .eq("id", id);
 
-  // Recalculate wins/losses for both teams if winner changed
+  // Recalculate wins/losses if winner changed
   if (existingMatch && existingMatch.winner !== winner) {
     const homeTeamId = existingMatch.home_team;
     const awayTeamId = existingMatch.away_team;
-    const seasonId = existingMatch.season_id;
+    const seasonId   = existingMatch.season_id;
 
-    // Get all matches for this season to recalculate from scratch
     const { data: allMatches } = await supabase
       .from("schedule_matches")
       .select("*")
       .eq("season_id", seasonId);
 
-    // Build a map of teamId -> { wins, losses }
     const record: Record<string, { wins: number; losses: number }> = {};
     for (const match of allMatches ?? []) {
       if (!match.winner) continue;
@@ -151,20 +143,15 @@ export async function updateMatch(formData: FormData) {
       record[l] = { wins: record[l]?.wins ?? 0, losses: (record[l]?.losses ?? 0) + 1 };
     }
 
-    // Update both teams involved in this match
     for (const teamId of [homeTeamId, awayTeamId]) {
       await supabase
         .from("teams")
-        .update({
-          wins: record[teamId]?.wins ?? 0,
-          losses: record[teamId]?.losses ?? 0
-        })
+        .update({ wins: record[teamId]?.wins ?? 0, losses: record[teamId]?.losses ?? 0 })
         .eq("id", teamId);
     }
   }
 
   revalidatePath("/schedule");
-  revalidatePath("/standings");
   revalidatePath("/");
 }
 
