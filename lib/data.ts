@@ -110,7 +110,12 @@ export async function getRoster(teamId: string) {
 }
 
 export async function getSchedule(seasonId: string) {
-  if (!hasSupabaseEnv()) return schedule.filter((match) => match.seasonId === seasonId);
+  if (!hasSupabaseEnv()) return schedule.filter((match) => match.seasonId === seasonId).map((match) => ({
+    ...match,
+    bo3Score: match.bo3Score ?? null,
+    homeDiff: match.homeDiff ?? 0,
+    awayDiff: match.awayDiff ?? 0,
+  }));
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
     .from("schedule_matches")
