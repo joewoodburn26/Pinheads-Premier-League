@@ -148,7 +148,7 @@ export function generatePlayoffBracket(
   // Subsequent rounds (placeholders — filled in as matches complete)
   for (let r = 2; r <= totalMainRounds; r++) {
     const matchCount = mainBracketSize / Math.pow(2, r);
-    const placeholders = Array.from({ length: matchCount }, (_, i) => ({
+    const placeholders = Array.from({ length: matchCount }, () => ({
       homeTeam: "TBD",
       awayTeam: "TBD",
       isBye: false,
