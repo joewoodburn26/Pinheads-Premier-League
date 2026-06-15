@@ -12,7 +12,6 @@ const nav = [
   ["Calculator",   "/damage-calculator"],
   ["Stats",        "/stats"],
   ["Rules",        "/rules"],
-  ["Seasons",      "/seasons"],
 ];
 
 const settingsNav = [
@@ -22,9 +21,9 @@ const settingsNav = [
 ];
 
 export function SiteHeader({
-  seasons, activeSeason, teams,
+  teams,
 }: {
-  seasons: Season[];
+  seasons?: Season[];
   activeSeason?: Season;
   teams: Team[];
 }) {
@@ -35,12 +34,6 @@ export function SiteHeader({
           Pinheads Draft
         </Link>
         <nav className="ml-auto flex flex-wrap items-center justify-end gap-2 text-sm">
-          <select className="h-9 rounded-md border bg-muted px-2 text-sm" defaultValue={activeSeason?.id}>
-            {seasons.map(season => (
-              <option key={season.id} value={season.id}>{season.name}</option>
-            ))}
-          </select>
-
           {/* Teams dropdown */}
           <div className="group relative">
             <button className="flex h-9 items-center gap-1 rounded-md px-3 hover:bg-muted">
