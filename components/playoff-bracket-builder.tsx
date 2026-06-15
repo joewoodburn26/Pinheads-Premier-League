@@ -304,7 +304,7 @@ export function PlayoffBracketBuilder({
   }
 
   function handleSave() {
-    const toSave: { round: number; roundName: string; slotIndex: number; team1Id: string | null; team2Id: string | null }[] = [];
+    const toSave = [];
     for (const round of structure) {
       for (let i = 0; i < round.slotCount; i++) {
         const key = `${round.round}-${i}`;
@@ -324,6 +324,38 @@ export function PlayoffBracketBuilder({
     });
   }
 
+  // ── Split rounds into left half / right half / final for the converging bracket ──
+  const nonPlayInRounds = structure.filter(r => r.round >= 1);
+  const playInRound     = structure.find(r => r.round === 0);
+  const finalRound      = nonPlayInRounds[nonPlayInRounds.length - 1]; // slotCount === 1
+
+  function renderSlot(round: number, i: number) {
+    const key = `${round}-${i}`;
+    const slot = slots[key] ?? { team1Id: null, team2Id: null };
+    const match = playoffMatches.find(m => m.round === round && m.slotIndex === i);
+    return (
+      <BracketSlotCard
+        key={key}
+        round={round}
+        slotIndex={i}
+        team1={{ id: slot.team1Id, name: getName(slot.team1Id) }}
+        team2={{ id: slot.team2Id, name: getName(slot.team2Id) }}
+        match={match}
+        seasonId={seasonId}
+        onAssign={handleAssign}
+        onClear={handleClear}
+      />
+    );
+  }
+
+  // Split slot indices into left half and right half for mirroring
+  function halves(round: { round: number; slotCount: number }) {
+    const half = round.slotCount / 2;
+    const left  = Array.from({ length: half }, (_, i) => i);
+    const right = Array.from({ length: half }, (_, i) => i + half);
+    return { left, right };
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -335,36 +367,76 @@ export function PlayoffBracketBuilder({
 
       <MiniStandings standings={standings} />
 
-      {structure.map(round => (
-        <div key={round.round} className="space-y-3">
+      {/* Play-In round (if present) — shown above the main bracket */}
+      {playInRound && (
+        <div className="space-y-3">
           <h3 className="text-lg font-bold flex items-center gap-2">
-            {round.round === 0
-              ? <><Shield size={18} className="text-orange-400" /> Play-In Round</>
-              : <><Trophy size={18} className="text-yellow-400" /> {round.roundName}</>
-            }
+            <Shield size={18} className="text-orange-400" /> Play-In Round
           </h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: round.slotCount }).map((_, i) => {
-              const key = `${round.round}-${i}`;
-              const slot = slots[key] ?? { team1Id: null, team2Id: null };
-              const match = playoffMatches.find(m => m.round === round.round && m.slotIndex === i);
-              return (
-                <BracketSlotCard
-                  key={key}
-                  round={round.round}
-                  slotIndex={i}
-                  team1={{ id: slot.team1Id, name: getName(slot.team1Id) }}
-                  team2={{ id: slot.team2Id, name: getName(slot.team2Id) }}
-                  match={match}
-                  seasonId={seasonId}
-                  onAssign={handleAssign}
-                  onClear={handleClear}
-                />
-              );
-            })}
+            {Array.from({ length: playInRound.slotCount }).map((_, i) => (
+              <div key={i} className="w-full max-w-xs">{renderSlot(0, i)}</div>
+            ))}
           </div>
         </div>
-      ))}
+      )}
+
+      {/* Converging bracket */}
+      <div className="space-y-3">
+        <h3 className="text-lg font-bold flex items-center gap-2">
+          <Trophy size={18} className="text-yellow-400" /> Bracket
+        </h3>
+
+        <div className="overflow-x-auto pb-4">
+          <div className="flex items-center justify-center gap-6 min-w-fit px-2">
+
+            {/* LEFT SIDE */}
+            <div className="flex items-center gap-6">
+              {nonPlayInRounds.slice(0, -1).map(round => {
+                const { left } = halves(round);
+                return (
+                  <div key={`left-${round.round}`} className="flex flex-col gap-6" style={{ minWidth: "220px" }}>
+                    <p className="text-center text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                      {round.roundName}
+                    </p>
+                    <div className="flex flex-1 flex-col justify-around gap-6">
+                      {left.map(i => <div key={i}>{renderSlot(round.round, i)}</div>)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* CENTER — Finals */}
+            {finalRound && (
+              <div className="flex flex-col items-center gap-2" style={{ minWidth: "220px" }}>
+                <p className="text-center text-xs font-bold uppercase tracking-wider text-yellow-400 mb-1">
+                  🏆 {finalRound.roundName}
+                </p>
+                {renderSlot(finalRound.round, 0)}
+              </div>
+            )}
+
+            {/* RIGHT SIDE — mirrored */}
+            <div className="flex items-center gap-6">
+              {[...nonPlayInRounds.slice(0, -1)].reverse().map(round => {
+                const { right } = halves(round);
+                return (
+                  <div key={`right-${round.round}`} className="flex flex-col gap-6" style={{ minWidth: "220px" }}>
+                    <p className="text-center text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                      {round.roundName}
+                    </p>
+                    <div className="flex flex-1 flex-col justify-around gap-6">
+                      {right.map(i => <div key={i}>{renderSlot(round.round, i)}</div>)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+          </div>
+        </div>
+      </div>
 
       <div className="flex items-center gap-3 sticky bottom-4">
         <Button onClick={handleSave} disabled={isPending} className="text-base px-6 py-3">

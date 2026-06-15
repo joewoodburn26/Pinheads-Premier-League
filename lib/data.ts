@@ -78,7 +78,7 @@ export async function getSchedule(seasonId: string) {
     awayDiff: match.awayDiff ?? 0, isBye: false,
   }));
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.from("schedule_matches").select("*").eq("season_id", seasonId).order("week");
+  const { data } = await supabase.from("schedule_matches").select("*").eq("season_id", seasonId).order("week", { ascending: true }).order("id", { ascending: true });
   return (data ?? []).map((row) => ({
     id: row.id, seasonId: row.season_id, week: row.week,
     homeTeam: row.home_team, awayTeam: row.away_team,
