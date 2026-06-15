@@ -304,7 +304,7 @@ export function PlayoffBracketBuilder({
   }
 
   function handleSave() {
-    const toSave = [];
+    const toSave: { round: number; roundName: string; slotIndex: number; team1Id: string | null; team2Id: string | null }[] = [];
     for (const round of structure) {
       for (let i = 0; i < round.slotCount; i++) {
         const key = `${round.round}-${i}`;
