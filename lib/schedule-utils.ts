@@ -160,7 +160,6 @@ export function getBracketSeeding(teamCount: number): BracketSeeding {
   const round1Seeds: { slotIndex: number; seed1: number | null; seed2: number | null }[] = [];
   const playInDestinations: { playInIndex: number; seed1: number; seed2: number; round1SlotIndex: number; side: 1 | 2 }[] = [];
 
-  let playInCounter = 0;
   // Lowest seeds (directSeedCutoff+1 .. mainBracketSize) in canonical order positions are replaced by play-in winners
   // Play-in pairs: (directSeedCutoff+1 vs teamCount), (directSeedCutoff+2 vs teamCount-1), ...
   const playInPairs: { seed1: number; seed2: number }[] = [];
