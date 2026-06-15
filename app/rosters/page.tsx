@@ -1,5 +1,5 @@
 import { getTeams, getRoster, getActiveSeason, getPokemon } from "@/lib/data";
-import { TeamRosterEditor } from "@/components/team-roster-editor";
+import { RostersClient } from "@/components/rosters-client";
 import { RosterTeamFilter } from "@/components/roster-team-filter";
 
 export const revalidate = 0;
@@ -38,24 +38,13 @@ export default async function RostersPage({
         <div>
           <h1 className="text-4xl font-black">Rosters</h1>
           <p className="mt-1 text-muted-foreground">
-            {season.name} · click ↔ to replace or ✕ to remove a Pokémon · drag to reorder
+            {season.name} · click ↔ to replace or ✕ to remove a Pokémon · drag cards to reorder
           </p>
         </div>
         <RosterTeamFilter allTeams={allTeams} selectedIds={selectedIds} />
       </div>
 
-      {rosters.map(({ team, slots }) => (
-        <section key={team.id} className="space-y-3">
-          <h2 className="text-3xl font-bold">{team.teamName}</h2>
-          <TeamRosterEditor
-            key={`${team.id}-${slots.map(s => s.id).join("-")}`}
-            teamId={team.id}
-            seasonId={season.id}
-            slots={slots}
-            allPokemon={allPokemon}
-          />
-        </section>
-      ))}
+      <RostersClient initialRosters={rosters} seasonId={season.id} allPokemon={allPokemon} />
     </div>
   );
 }

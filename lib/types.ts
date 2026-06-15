@@ -22,6 +22,7 @@ export type Team = {
   logoUrl: string | null;
   wins: number;
   losses: number;
+  draftOrder?: number;
   coach?: Coach;
 };
 

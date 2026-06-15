@@ -22,10 +22,11 @@ export async function getTeams(seasonId?: string) {
   const { data } = await supabase
     .from("teams").select("*, coach:coaches(*)")
     .eq("season_id", seasonId ?? (await getActiveSeason()).id)
-    .order("wins", { ascending: false });
+    .order("draft_order", { ascending: true });
   return (data ?? []).map((row) => ({
     id: row.id, seasonId: row.season_id, coachId: row.coach_id,
     teamName: row.team_name, logoUrl: row.logo_url, wins: row.wins, losses: row.losses,
+    draftOrder: row.draft_order ?? 0,
     coach: row.coach
       ? { id: row.coach.id, name: row.coach.name, imageUrl: row.coach.image_url, bio: row.coach.bio }
       : undefined
