@@ -367,7 +367,7 @@ export function PlayoffBracketBuilder({
       ))}
 
       <div className="flex items-center gap-3 sticky bottom-4">
-        <Button onClick={handleSave} disabled={isPending} size="lg">
+        <Button onClick={handleSave} disabled={isPending} className="text-base px-6 py-3">
           <Save size={16} className="mr-2" />
           {isPending ? "Saving Bracket…" : "Save Bracket"}
         </Button>
