@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DraftOrderCards } from "@/components/draft-order-cards";
 import { TeamRosterEditor } from "@/components/team-roster-editor";
 import type { Team, TeamPokemon, Pokemon } from "@/lib/types";
@@ -19,8 +19,12 @@ export function RostersClient({
 }) {
   const [rosters, setRosters] = useState(initialRosters);
 
+  // Sync with server data when it changes (after add/remove/revalidate or filter change)
+  useEffect(() => {
+    setRosters(initialRosters);
+  }, [initialRosters]);
+
   function handleReorder(newTeamOrder: Team[]) {
-    // Re-sort rosters to match the new team order
     const reordered = newTeamOrder.map(team =>
       rosters.find(r => r.team.id === team.id)!
     );
