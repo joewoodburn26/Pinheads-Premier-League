@@ -210,10 +210,10 @@ function MatchResultForm({
 // ─── Bracket slot card ───────────────────────────────────────────────────────
 
 function BracketSlotCard({
-  round, roundName, slotIndex, team1, team2, match, seasonId,
+  round, slotIndex, team1, team2, match, seasonId,
   onAssign, onClear,
 }: {
-  round: number; roundName: string; slotIndex: number;
+  round: number; slotIndex: number;
   team1: { id: string | null; name: string };
   team2: { id: string | null; name: string };
   match: PlayoffMatch | undefined;
@@ -352,7 +352,6 @@ export function PlayoffBracketBuilder({
                 <BracketSlotCard
                   key={key}
                   round={round.round}
-                  roundName={round.roundName}
                   slotIndex={i}
                   team1={{ id: slot.team1Id, name: getName(slot.team1Id) }}
                   team2={{ id: slot.team2Id, name: getName(slot.team2Id) }}
