@@ -5,7 +5,7 @@ import { ExternalLink, Save, Trophy, Shield, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getBracketStructure } from "@/lib/schedule-utils";
+import { getBracketStructure, getBracketSeeding } from "@/lib/schedule-utils";
 import { saveBracketSlots, updatePlayoffMatch, type PlayoffMatch } from "@/lib/playoff-actions";
 import { winPct } from "@/lib/utils";
 
@@ -58,11 +58,12 @@ function MiniStandings({ standings }: { standings: StandingRow[] }) {
 // ─── Slot drop target ──────────────────────────────────────────────────────────
 
 function SlotDropTarget({
-  label, teamId, teamName, onDrop, onClear,
+  label, teamId, teamName, placeholder, onDrop, onClear,
 }: {
   label: string;
   teamId: string | null;
   teamName: string;
+  placeholder?: string;
   onDrop: (teamId: string) => void;
   onClear: () => void;
 }) {
@@ -84,8 +85,8 @@ function SlotDropTarget({
       }`}
     >
       <span className="text-xs text-muted-foreground w-5 shrink-0">{label}</span>
-      <span className={`flex-1 font-semibold truncate ${teamId ? "" : "text-muted-foreground italic"}`}>
-        {teamId ? teamName : "Drop team here"}
+      <span className={`flex-1 font-semibold truncate ${teamId ? "" : "text-muted-foreground italic text-xs"}`}>
+        {teamId ? teamName : (placeholder ?? "Drop team here")}
       </span>
       {teamId && (
         <button onClick={onClear} className="shrink-0 text-muted-foreground hover:text-destructive transition-colors">
@@ -210,7 +211,7 @@ function MatchResultForm({
 // ─── Bracket slot card ───────────────────────────────────────────────────────
 
 function BracketSlotCard({
-  round, slotIndex, team1, team2, match, seasonId,
+  round, slotIndex, team1, team2, match, seasonId, placeholder1, placeholder2,
   onAssign, onClear,
 }: {
   round: number; slotIndex: number;
@@ -218,6 +219,8 @@ function BracketSlotCard({
   team2: { id: string | null; name: string };
   match: PlayoffMatch | undefined;
   seasonId: string;
+  placeholder1?: string;
+  placeholder2?: string;
   onAssign: (round: number, slotIndex: number, side: 1 | 2, teamId: string) => void;
   onClear: (round: number, slotIndex: number, side: 1 | 2) => void;
 }) {
@@ -226,11 +229,11 @@ function BracketSlotCard({
 
   return (
     <Card className={`p-3 space-y-2 ${match?.winner ? "border-primary/30" : ""}`}>
-      <SlotDropTarget label="1" teamId={team1.id} teamName={team1.name}
+      <SlotDropTarget label="1" teamId={team1.id} teamName={team1.name} placeholder={placeholder1}
         onDrop={tid => onAssign(round, slotIndex, 1, tid)}
         onClear={() => onClear(round, slotIndex, 1)} />
       <p className="text-center text-xs text-muted-foreground">vs</p>
-      <SlotDropTarget label="2" teamId={team2.id} teamName={team2.name}
+      <SlotDropTarget label="2" teamId={team2.id} teamName={team2.name} placeholder={placeholder2}
         onDrop={tid => onAssign(round, slotIndex, 2, tid)}
         onClear={() => onClear(round, slotIndex, 2)} />
 
@@ -270,6 +273,39 @@ export function PlayoffBracketBuilder({
   const [saved, setSaved] = useState(false);
 
   const structure = getBracketStructure(standings.length);
+  const seeding   = getBracketSeeding(standings.length);
+
+  // Map seed number -> team name (from current standings)
+  function seedTeamName(seed: number | null): string {
+    if (seed === null) return "";
+    const row = standings.find(s => s.seed === seed);
+    return row ? row.teamName : `Seed #${seed}`;
+  }
+
+  // Placeholder text for Round 1 slots
+  function round1Placeholder(slotIndex: number, side: 1 | 2): string | undefined {
+    const info = seeding.round1Seeds.find(r => r.slotIndex === slotIndex);
+    if (!info) return undefined;
+    const seed = side === 1 ? info.seed1 : info.seed2;
+    if (seed !== null) return `Seed #${seed} — ${seedTeamName(seed)}`;
+    // This side comes from a play-in winner
+    const dest = seeding.playInDestinations.find(d => d.round1SlotIndex === slotIndex && d.side === side);
+    if (dest) return `Winner of Play-In ${dest.playInIndex + 1} (#${dest.seed1} vs #${dest.seed2})`;
+    return undefined;
+  }
+
+  // Placeholder text for Play-In slots
+  function playInPlaceholder(playInIndex: number, side: 1 | 2): string | undefined {
+    const dest = seeding.playInDestinations.find(d => d.playInIndex === playInIndex);
+    if (!dest) return undefined;
+    const seed = side === 1 ? dest.seed1 : dest.seed2;
+    return `Seed #${seed} — ${seedTeamName(seed)}`;
+  }
+
+  // For non-Round-1 rounds (Round 2+), no specific seed placeholder — just generic
+  function laterRoundPlaceholder(): string | undefined {
+    return "Winner advances here";
+  }
 
   // Local editable state: round -> slotIndex -> { team1Id, team2Id }
   const initial: Record<string, { team1Id: string | null; team2Id: string | null }> = {};
@@ -304,7 +340,7 @@ export function PlayoffBracketBuilder({
   }
 
   function handleSave() {
-    const toSave: { round: number; roundName: string; slotIndex: number; team1Id: string | null; team2Id: string | null }[] = [];
+    const toSave = [];
     for (const round of structure) {
       for (let i = 0; i < round.slotCount; i++) {
         const key = `${round.round}-${i}`;
@@ -333,6 +369,20 @@ export function PlayoffBracketBuilder({
     const key = `${round}-${i}`;
     const slot = slots[key] ?? { team1Id: null, team2Id: null };
     const match = playoffMatches.find(m => m.round === round && m.slotIndex === i);
+
+    let placeholder1: string | undefined;
+    let placeholder2: string | undefined;
+    if (round === 0) {
+      placeholder1 = playInPlaceholder(i, 1);
+      placeholder2 = playInPlaceholder(i, 2);
+    } else if (round === 1) {
+      placeholder1 = round1Placeholder(i, 1);
+      placeholder2 = round1Placeholder(i, 2);
+    } else {
+      placeholder1 = laterRoundPlaceholder();
+      placeholder2 = laterRoundPlaceholder();
+    }
+
     return (
       <BracketSlotCard
         key={key}
@@ -342,6 +392,8 @@ export function PlayoffBracketBuilder({
         team2={{ id: slot.team2Id, name: getName(slot.team2Id) }}
         match={match}
         seasonId={seasonId}
+        placeholder1={placeholder1}
+        placeholder2={placeholder2}
         onAssign={handleAssign}
         onClear={handleClear}
       />

@@ -108,3 +108,91 @@ export function getBracketStructure(teamCount: number): { round: number; roundNa
 
   return rounds;
 }
+
+/**
+ * Generate the canonical single-elimination seed order for a bracket of size n
+ * (n must be a power of 2). Returns an array where index = slot position (0-based)
+ * and value = seed number (1-based) that "should" occupy that slot in Round 1.
+ *
+ * E.g. for n=8: [1, 8, 4, 5, 2, 7, 3, 6]
+ * This pairs as (1v8), (4v5), (2v7), (3v6) — standard bracket seeding.
+ */
+function canonicalSeedOrder(n: number): number[] {
+  if (n === 1) return [1];
+  if (n === 2) return [1, 2];
+  const prev = canonicalSeedOrder(n / 2);
+  const result: number[] = [];
+  for (const seed of prev) {
+    result.push(seed);
+    result.push(n + 1 - seed);
+  }
+  return result;
+}
+
+export interface BracketSeeding {
+  /** For each Round 1 slot index, the two seed numbers expected (or null if filled by a play-in winner) */
+  round1Seeds: { slotIndex: number; seed1: number | null; seed2: number | null }[];
+  /** For each play-in match index, which Round 1 slot + side the winner advances to */
+  playInDestinations: { playInIndex: number; seed1: number; seed2: number; round1SlotIndex: number; side: 1 | 2 }[];
+}
+
+/**
+ * Compute full bracket seeding info for a given team count using Option B
+ * (round down to nearest power of 2, lowest seeds play-in for the remaining slots).
+ */
+export function getBracketSeeding(teamCount: number): BracketSeeding {
+  if (teamCount < 2) return { round1Seeds: [], playInDestinations: [] };
+
+  const mainBracketSize = Math.pow(2, Math.floor(Math.log2(teamCount)));
+  const playInCount = teamCount - mainBracketSize;
+  const order = canonicalSeedOrder(mainBracketSize); // length = mainBracketSize
+
+  // The lowest `playInCount` seeds in the canonical order (by position, from the end)
+  // need to come from play-in winners instead of direct seeds.
+  // Number of "slots" needing a play-in winner = playInCount (one winner per play-in match)
+  // Each play-in match produces ONE winner, so playInCount matches -> playInCount slots replaced.
+
+  // Seeds that go directly to main bracket: 1..(mainBracketSize - playInCount)
+  // Seeds that play in: (mainBracketSize - playInCount + 1)..teamCount
+  const directSeedCutoff = mainBracketSize - playInCount;
+
+  // Build round1Seeds: walk canonical order in pairs (slot has seed1, seed2)
+  const round1Seeds: { slotIndex: number; seed1: number | null; seed2: number | null }[] = [];
+  const playInDestinations: { playInIndex: number; seed1: number; seed2: number; round1SlotIndex: number; side: 1 | 2 }[] = [];
+
+  let playInCounter = 0;
+  // Lowest seeds (directSeedCutoff+1 .. mainBracketSize) in canonical order positions are replaced by play-in winners
+  // Play-in pairs: (directSeedCutoff+1 vs teamCount), (directSeedCutoff+2 vs teamCount-1), ...
+  const playInPairs: { seed1: number; seed2: number }[] = [];
+  for (let i = 0; i < playInCount; i++) {
+    playInPairs.push({ seed1: directSeedCutoff + 1 + i, seed2: teamCount - i });
+  }
+
+  for (let slot = 0; slot < mainBracketSize / 2; slot++) {
+    const a = order[slot * 2];
+    const b = order[slot * 2 + 1];
+
+    const aIsPlayIn = a > directSeedCutoff;
+    const bIsPlayIn = b > directSeedCutoff;
+
+    let seed1: number | null = a;
+    let seed2: number | null = b;
+
+    if (aIsPlayIn) {
+      const pairIdx = a - directSeedCutoff - 1;
+      const pair = playInPairs[pairIdx];
+      playInDestinations.push({ playInIndex: pairIdx, seed1: pair.seed1, seed2: pair.seed2, round1SlotIndex: slot, side: 1 });
+      seed1 = null;
+    }
+    if (bIsPlayIn) {
+      const pairIdx = b - directSeedCutoff - 1;
+      const pair = playInPairs[pairIdx];
+      playInDestinations.push({ playInIndex: pairIdx, seed1: pair.seed1, seed2: pair.seed2, round1SlotIndex: slot, side: 2 });
+      seed2 = null;
+    }
+
+    round1Seeds.push({ slotIndex: slot, seed1, seed2 });
+  }
+
+  return { round1Seeds, playInDestinations };
+}
