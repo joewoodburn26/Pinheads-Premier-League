@@ -1,4 +1,5 @@
 import { getActiveSeason, getSchedule, getTeams } from "@/lib/data";
+import { getPlayoffMatches } from "@/lib/playoff-actions";
 import { ScheduleClient } from "@/components/schedule-client";
 
 export const revalidate = 0;
@@ -9,9 +10,10 @@ export default async function SchedulePage({
   searchParams: Promise<{ week?: string }>;
 }) {
   const season = await getActiveSeason();
-  const [matches, teams] = await Promise.all([
+  const [matches, teams, playoffMatches] = await Promise.all([
     getSchedule(season.id),
     getTeams(season.id),
+    getPlayoffMatches(season.id),
   ]);
 
   const weeks = [...new Set(matches.map(m => m.week))].sort((a, b) => a - b);
@@ -22,6 +24,8 @@ export default async function SchedulePage({
       matches={matches}
       teams={teams}
       initialWeek={requested}
+      playoffMatches={playoffMatches}
+      seasonId={season.id}
     />
   );
 }

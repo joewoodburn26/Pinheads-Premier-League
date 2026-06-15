@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ExternalLink, Save, Trophy, Shield, Swords } from "lucide-react";
+import { ExternalLink, Save, Trophy, Swords } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { updateMatch } from "@/lib/actions";
-import { generatePlayoffBracket } from "@/lib/schedule-utils";
+import { PlayoffBracketBuilder } from "@/components/playoff-bracket-builder";
 import type { ScheduleMatch, Team } from "@/lib/types";
+import type { PlayoffMatch } from "@/lib/playoff-actions";
 import { winPct } from "@/lib/utils";
 
 const BYE_ID = "BYE";
@@ -81,77 +82,6 @@ function StandingsTable({ standings }: { standings: StandingRow[] }) {
         <p><span className="font-semibold text-foreground">3rd:</span> Head-to-Head Record</p>
         <p><span className="font-semibold text-foreground">4th:</span> Cumulative Game Win %</p>
       </Card>
-    </div>
-  );
-}
-
-// ─── Playoff bracket ──────────────────────────────────────────────────────────
-
-function PlayoffBracket({
-  standings, matches, teamName,
-}: {
-  standings: StandingRow[];
-  matches: ScheduleMatch[];
-  teamName: (id: string) => string;
-}) {
-  const allWeeksComplete = standings.length > 0 &&
-    matches.filter(m => !m.isBye).every(m => m.winner);
-
-  const bracket = generatePlayoffBracket(
-    standings.map(s => ({ teamId: s.teamId, teamName: s.teamName, seed: s.seed }))
-  );
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-black">Playoffs</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Single elimination · Best vs worst seeding · Bo3 all rounds
-        </p>
-        {!allWeeksComplete && (
-          <div className="mt-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-2 text-sm text-yellow-400">
-            ⚠️ Bracket auto-populates once all regular season weeks are complete. You can set results manually now.
-          </div>
-        )}
-      </div>
-
-      {bracket.map((round) => (
-        <div key={round.round} className="space-y-3">
-          <h3 className="text-lg font-bold flex items-center gap-2">
-            {round.round === 0
-              ? <><Shield size={18} className="text-orange-400" /> Play-In Round</>
-              : <><Trophy size={18} className="text-yellow-400" /> {round.roundName}</>
-            }
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {round.matchups.map((m, idx) => (
-              <Card key={idx} className={`p-4 ${round.round === 0 ? "border-orange-500/30" : "border-yellow-500/20"}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="space-y-1 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-bold rounded-full px-2 py-0.5 ${round.round === 0 ? "bg-orange-500/20 text-orange-400" : "bg-yellow-500/20 text-yellow-400"}`}>
-                        #{m.seed1}
-                      </span>
-                      <span className="font-bold">{m.homeTeam === "TBD" ? "TBD" : teamName(m.homeTeam)}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground pl-8">vs</p>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-bold rounded-full px-2 py-0.5 ${round.round === 0 ? "bg-orange-500/20 text-orange-400" : "bg-yellow-500/20 text-yellow-400"}`}>
-                        #{m.seed2}
-                      </span>
-                      <span className="font-bold">{m.awayTeam === "TBD" ? "TBD" : teamName(m.awayTeam)}</span>
-                    </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground text-right">
-                    <p>Bo3</p>
-                    <p className="text-muted-foreground/50">Result TBD</p>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
@@ -347,10 +277,12 @@ function WeekTab({ week, matches, teamName, standings }: {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function ScheduleClient({ matches, teams, initialWeek }: {
+export function ScheduleClient({ matches, teams, initialWeek, playoffMatches, seasonId }: {
   matches: ScheduleMatch[];
   teams: Team[];
   initialWeek: number;
+  playoffMatches: PlayoffMatch[];
+  seasonId: string;
 }) {
   const realMatches = matches.filter(m => !m.isBye);
   const weeks = [...new Set(matches.map(m => m.week))].sort((a, b) => a - b);
@@ -362,6 +294,9 @@ export function ScheduleClient({ matches, teams, initialWeek }: {
     if (id === BYE_ID) return "BYE";
     return teams.find(t => t.id === id)?.teamName ?? "TBD";
   };
+
+  const teamNameMap: Record<string, string> = {};
+  teams.forEach(t => { teamNameMap[t.id] = t.teamName; });
 
   // Calculate standings from match data
   const standings: StandingRow[] = teams.map(team => {
@@ -419,7 +354,12 @@ export function ScheduleClient({ matches, teams, initialWeek }: {
       {/* Content */}
       {activeTab === "standings" && <StandingsTable standings={standings} />}
       {activeTab === "playoffs" && (
-        <PlayoffBracket standings={standings} matches={realMatches} teamName={teamName} />
+        <PlayoffBracketBuilder
+          standings={standings}
+          playoffMatches={playoffMatches}
+          seasonId={seasonId}
+          teamNameMap={teamNameMap}
+        />
       )}
       {typeof activeTab === "number" && (
         <WeekTab week={activeTab} matches={matches} teamName={teamName} standings={standings} />

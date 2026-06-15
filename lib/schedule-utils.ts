@@ -8,6 +8,11 @@ export const BYE_ID = "BYE";
  * If N is odd, adds a BYE team to make it even.
  * Uses the circle method to avoid repeats.
  * Returns up to maxWeeks weeks of matchups.
+ *
+ * IMPORTANT: Call this only at generation time (season creation or
+ * schedule regeneration). The teamIds array should already be shuffled
+ * via shuffleArray() before calling this, so the matchup order is
+ * randomized once and then stays stable in the database.
  */
 export function generateRoundRobin(
   teamIds: string[],
@@ -44,20 +49,12 @@ export function generateRoundRobin(
     circle.splice(1, 0, last);
   }
 
-  // Shuffle matchup order within each week for randomness
-  for (let w = 1; w <= weeks; w++) {
-    const weekSlice = schedule.filter(m => m.week === w);
-    for (let i = weekSlice.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [weekSlice[i], weekSlice[j]] = [weekSlice[j], weekSlice[i]];
-    }
-  }
-
   return schedule;
 }
 
 /**
- * Shuffle array in place using Fisher-Yates
+ * Shuffle array using Fisher-Yates. Call once at generation time
+ * (season creation or schedule regeneration) — never on render.
  */
 export function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -69,111 +66,45 @@ export function shuffleArray<T>(arr: T[]): T[] {
 }
 
 /**
- * Calculate playoff bracket using Option B:
- * - Find largest power of 2 ≤ N
- * - Bottom teams play in (play-in round)
- * - Top seeds get byes into main bracket
- *
- * Returns rounds with matchups in seed order (1 vs last, 2 vs second-to-last)
+ * Get round name based on the number of slots in that round.
+ * Used for labeling rounds in the manual playoff bracket builder.
  */
-export function generatePlayoffBracket(
-  seededTeams: { teamId: string; teamName: string; seed: number }[]
-): {
-  round: number;
-  roundName: string;
-  matchups: { homeTeam: string; awayTeam: string; isBye: boolean; seed1: number; seed2: number }[];
-}[] {
-  const n = seededTeams.length;
-  if (n < 2) return [];
-
-  // Largest power of 2 ≤ n
-  const mainBracketSize = Math.pow(2, Math.floor(Math.log2(n)));
-  const playInCount = n - mainBracketSize; // teams that need play-in
-
-  const rounds: {
-    round: number;
-    roundName: string;
-    matchups: { homeTeam: string; awayTeam: string; isBye: boolean; seed1: number; seed2: number }[];
-  }[] = [];
-
-  // Play-in round (if needed)
-  if (playInCount > 0) {
-    const playInMatchups = [];
-    for (let i = 0; i < playInCount; i++) {
-      const highSeed = seededTeams[mainBracketSize + i]; // e.g. seed 9, 10
-      const lowSeed  = seededTeams[n - 1 - i];           // e.g. seed 10, 9
-      if (highSeed && lowSeed && highSeed.teamId !== lowSeed.teamId) {
-        playInMatchups.push({
-          homeTeam: highSeed.teamId,
-          awayTeam: lowSeed.teamId,
-          isBye: false,
-          seed1: highSeed.seed,
-          seed2: lowSeed.seed,
-        });
-      }
-    }
-    if (playInMatchups.length > 0) {
-      rounds.push({ round: 0, roundName: "Play-In", matchups: playInMatchups });
-    }
-  }
-
-  // Main bracket rounds
-  const totalMainRounds = Math.log2(mainBracketSize);
-  const roundNames: Record<number, string> = {
-    1: "First Round",
-    2: "Quarterfinals",
-    3: "Semifinals",
-    4: "Finals",
+export function getRoundName(slotsInRound: number): string {
+  const names: Record<number, string> = {
+    1: "Finals",
+    2: "Semifinals",
+    4: "Quarterfinals",
+    8: "Round of 16",
   };
-
-  // Round 1 matchups: seed 1 vs last, 2 vs second-to-last, etc.
-  const r1Matchups = [];
-  for (let i = 0; i < mainBracketSize / 2; i++) {
-    const top    = seededTeams[i];
-    const bottom = seededTeams[mainBracketSize - 1 - i];
-    r1Matchups.push({
-      homeTeam: top.teamId,
-      awayTeam: bottom.teamId,
-      isBye: false,
-      seed1: top.seed,
-      seed2: bottom.seed,
-    });
-  }
-  rounds.push({
-    round: 1,
-    roundName: roundNames[totalMainRounds] ?? `Round of ${mainBracketSize}`,
-    matchups: r1Matchups,
-  });
-
-  // Subsequent rounds (placeholders — filled in as matches complete)
-  for (let r = 2; r <= totalMainRounds; r++) {
-    const matchCount = mainBracketSize / Math.pow(2, r);
-    const placeholders = Array.from({ length: matchCount }, () => ({
-      homeTeam: "TBD",
-      awayTeam: "TBD",
-      isBye: false,
-      seed1: 0,
-      seed2: 0,
-    }));
-    rounds.push({
-      round: r,
-      roundName: roundNames[r] ?? `Round ${r}`,
-      matchups: placeholders,
-    });
-  }
-
-  return rounds;
+  return names[slotsInRound] ?? `Round of ${slotsInRound * 2}`;
 }
 
 /**
- * Get round name based on teams remaining
+ * Compute the bracket structure (number of rounds and slots per round)
+ * for a given number of teams, using "round down to nearest power of 2,
+ * extra teams play a Play-In round" (Option B).
+ *
+ * Returns an array of rounds, each with a slot count and round name.
+ * Round 0 = Play-In (only present if team count isn't a power of 2).
+ * Subsequent rounds halve until Finals (1 slot).
  */
-export function getRoundName(teamsRemaining: number): string {
-  const names: Record<number, string> = {
-    2: "Finals",
-    4: "Semifinals",
-    8: "Quarterfinals",
-    16: "Round of 16",
-  };
-  return names[teamsRemaining] ?? `Round of ${teamsRemaining}`;
+export function getBracketStructure(teamCount: number): { round: number; roundName: string; slotCount: number }[] {
+  if (teamCount < 2) return [];
+
+  const mainBracketSize = Math.pow(2, Math.floor(Math.log2(teamCount)));
+  const playInCount = teamCount - mainBracketSize;
+
+  const rounds: { round: number; roundName: string; slotCount: number }[] = [];
+
+  if (playInCount > 0) {
+    rounds.push({ round: 0, roundName: "Play-In", slotCount: playInCount });
+  }
+
+  const totalMainRounds = Math.log2(mainBracketSize);
+  for (let r = 1; r <= totalMainRounds; r++) {
+    const slotCount = mainBracketSize / Math.pow(2, r);
+    rounds.push({ round: r, roundName: getRoundName(slotCount), slotCount });
+  }
+
+  return rounds;
 }
