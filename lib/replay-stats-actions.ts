@@ -56,11 +56,11 @@ export async function parseAndSaveReplayStats(
     const rosterLookup = new Map<string, { pokemonId: string; teamId: string }>();
 
     for (const slot of homeSlots ?? []) {
-      const mon = slot.pokemon as { id: string; name: string } | null;
+      const mon = Array.isArray(slot.pokemon) ? slot.pokemon[0] : slot.pokemon as { id: string; name: string } | null;
       if (mon) rosterLookup.set(mon.name.toLowerCase(), { pokemonId: mon.id, teamId: homeTeamId });
     }
     for (const slot of awaySlots ?? []) {
-      const mon = slot.pokemon as { id: string; name: string } | null;
+      const mon = Array.isArray(slot.pokemon) ? slot.pokemon[0] : slot.pokemon as { id: string; name: string } | null;
       if (mon) rosterLookup.set(mon.name.toLowerCase(), { pokemonId: mon.id, teamId: awayTeamId });
     }
 
