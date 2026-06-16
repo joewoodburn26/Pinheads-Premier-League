@@ -64,7 +64,6 @@ export function parseReplayLog(log: string, format: string): Omit<ReplayParseRes
   const statsMap = new Map<string, PokemonBattleStats>();
 
   // Track which pokemon are currently active/sent out in current game
-  const activePokemon = new Set<string>(); // keys like "p1|Samurott"
   const sentOutThisGame = new Set<string>(); // to avoid double counting
 
   function getKey(player: "p1" | "p2", name: string) {

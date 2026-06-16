@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/server";
-import { fetchAndParseReplay, normalizePokemonName } from "@/lib/replay-parser";
+import { fetchAndParseReplay } from "@/lib/replay-parser";
 
 export interface ParseReplayResult {
   ok: boolean;
@@ -30,7 +30,6 @@ export async function parseAndSaveReplayStats(
   seasonId: string,
   homeTeamId: string,
   awayTeamId: string,
-  matchId: string,
 ): Promise<ParseReplayResult> {
   if (!replayUrl?.trim()) return { ok: false, error: "No replay URL provided" };
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase not configured" };

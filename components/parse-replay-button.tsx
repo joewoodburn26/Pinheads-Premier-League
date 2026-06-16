@@ -12,9 +12,6 @@ interface ParseReplayButtonProps {
   seasonId: string;
   homeTeamId: string;
   awayTeamId: string;
-  homeTeamName: string;
-  awayTeamName: string;
-  matchId: string;
 }
 
 interface StatRow {
@@ -29,7 +26,6 @@ interface StatRow {
 
 export function ParseReplayButton({
   replayUrl, replayLabel, seasonId, homeTeamId, awayTeamId,
-  homeTeamName, awayTeamName, matchId,
 }: ParseReplayButtonProps) {
   const [isPending, startTransition] = useTransition();
   const [showModal, setShowModal] = useState(false);
@@ -42,7 +38,7 @@ export function ParseReplayButton({
     setShowModal(true);
     setResult(null);
     startTransition(async () => {
-      const res = await parseAndSaveReplayStats(replayUrl, seasonId, homeTeamId, awayTeamId, matchId);
+      const res = await parseAndSaveReplayStats(replayUrl, seasonId, homeTeamId, awayTeamId);
       setResult(res);
     });
   }

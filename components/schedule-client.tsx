@@ -103,11 +103,10 @@ function ByeWeekBanner({ byeTeamName }: { byeTeamName: string }) {
 
 // ─── Match card ───────────────────────────────────────────────────────────────
 
-function MatchCard({ match, teamName, seasonId, teams }: {
+function MatchCard({ match, teamName, seasonId }: {
   match: ScheduleMatch;
   teamName: (id: string) => string;
   seasonId: string;
-  teams: Team[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [winner,   setWinner]   = useState(match.winner ?? "");
@@ -223,9 +222,6 @@ function MatchCard({ match, teamName, seasonId, teams }: {
                 seasonId={seasonId}
                 homeTeamId={match.homeTeam}
                 awayTeamId={match.awayTeam}
-                homeTeamName={homeName}
-                awayTeamName={awayName}
-                matchId={match.id}
               />
             )}
           </div>
@@ -245,13 +241,12 @@ function MatchCard({ match, teamName, seasonId, teams }: {
 
 // ─── Week tab ─────────────────────────────────────────────────────────────────
 
-function WeekTab({ week, matches, teamName, standings, seasonId, teams }: {
+function WeekTab({ week, matches, teamName, standings, seasonId }: {
   week: number;
   matches: ScheduleMatch[];
   teamName: (id: string) => string;
   standings: StandingRow[];
   seasonId: string;
-  teams: Team[];
 }) {
   const weekMatches  = matches.filter(m => m.week === week);
   const realMatches  = weekMatches.filter(m => !m.isBye);
@@ -286,7 +281,7 @@ function WeekTab({ week, matches, teamName, standings, seasonId, teams }: {
       <div className="space-y-4">
         <h2 className="text-xl font-black">Week {week} Matches</h2>
         {realMatches.map(match => (
-          <MatchCard key={match.id} match={match} teamName={teamName} seasonId={seasonId} teams={teams} />
+          <MatchCard key={match.id} match={match} teamName={teamName} seasonId={seasonId} />
         ))}
       </div>
 
@@ -382,7 +377,7 @@ export function ScheduleClient({ matches, teams, initialWeek, playoffMatches, se
         />
       )}
       {typeof activeTab === "number" && (
-        <WeekTab week={activeTab} matches={matches} teamName={teamName} standings={standings} seasonId={seasonId} teams={teams} />
+        <WeekTab week={activeTab} matches={matches} teamName={teamName} standings={standings} seasonId={seasonId} />
       )}
     </div>
   );
