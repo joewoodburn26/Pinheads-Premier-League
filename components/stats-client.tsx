@@ -21,9 +21,17 @@ function EditableStatRow({ row }: { row: StatsRow }) {
   const [deaths, setDeaths] = useState(String(row.deaths));
   const [saved,  setSaved]  = useState(false);
 
+  const isPlaceholder = row.id.startsWith("placeholder-");
+
   function handleSave() {
     startTransition(async () => {
-      await updatePokemonStats(row.id, parseInt(games) || 0, parseInt(kos) || 0, parseInt(deaths) || 0);
+      await updatePokemonStats(
+        row.id,
+        parseInt(games) || 0,
+        parseInt(kos) || 0,
+        parseInt(deaths) || 0,
+        isPlaceholder ? { seasonId: row.seasonId, teamId: row.teamId ?? "", pokemonId: row.pokemonId } : undefined,
+      );
       setSaved(true);
       setTimeout(() => { setSaved(false); setEditing(false); }, 1000);
     });

@@ -203,12 +203,31 @@ export async function updatePokemonStats(
   gamesPlayed: number,
   kos: number,
   deaths: number,
+  // Extra fields needed when creating a new row for a placeholder
+  extra?: { seasonId: string; teamId: string; pokemonId: string },
 ): Promise<{ ok: boolean }> {
   if (!hasSupabaseEnv()) return { ok: false };
-  await createSupabaseAdminClient()
-    .from("pokemon_stats")
-    .update({ games_played: gamesPlayed, kos, deaths })
-    .eq("id", statId);
+  const supabase = createSupabaseAdminClient();
+
+  if (statId.startsWith("placeholder-") && extra) {
+    // Row doesn't exist yet — insert it
+    await supabase.from("pokemon_stats").insert({
+      season_id:    extra.seasonId,
+      team_id:      extra.teamId,
+      pokemon_id:   extra.pokemonId,
+      games_played: gamesPlayed,
+      wins:         0,
+      losses:       0,
+      kos,
+      deaths,
+    });
+  } else {
+    await supabase
+      .from("pokemon_stats")
+      .update({ games_played: gamesPlayed, kos, deaths })
+      .eq("id", statId);
+  }
+
   revalidatePath("/stats");
   return { ok: true };
 }
