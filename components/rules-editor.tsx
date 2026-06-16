@@ -176,7 +176,7 @@ export function RulesEditor({ content }: { content: string }) {
       ) : (
         <Card className="p-8 text-center text-muted-foreground">
           <p className="text-sm">No rules added yet.</p>
-          <p className="text-xs mt-1">Click "Edit Rules" to add your first rule. Use H2 or H3 headings to create separate sections.</p>
+          <p className="text-xs mt-1">Click &quot;Edit Rules&quot; to add your first rule. Use H2 or H3 headings to create separate sections.</p>
         </Card>
       )}
 
