@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { updateMatch } from "@/lib/actions";
 import { PlayoffBracketBuilder } from "@/components/playoff-bracket-builder";
+import { ParseReplayButton } from "@/components/parse-replay-button";
 import type { ScheduleMatch, Team } from "@/lib/types";
 import type { PlayoffMatch } from "@/lib/playoff-actions";
 import { winPct } from "@/lib/utils";
@@ -102,7 +103,12 @@ function ByeWeekBanner({ byeTeamName }: { byeTeamName: string }) {
 
 // ─── Match card ───────────────────────────────────────────────────────────────
 
-function MatchCard({ match, teamName }: { match: ScheduleMatch; teamName: (id: string) => string }) {
+function MatchCard({ match, teamName, seasonId, teams }: {
+  match: ScheduleMatch;
+  teamName: (id: string) => string;
+  seasonId: string;
+  teams: Team[];
+}) {
   const [isPending, startTransition] = useTransition();
   const [winner,   setWinner]   = useState(match.winner ?? "");
   const [bo3Score, setBo3Score] = useState(match.bo3Score ?? "");
@@ -192,10 +198,10 @@ function MatchCard({ match, teamName }: { match: ScheduleMatch; teamName: (id: s
 
       <div className="grid gap-2 sm:grid-cols-3">
         {[
-          { label: "Game 1 Replay", value: replay1, set: setReplay1 },
-          { label: "Game 2 Replay", value: replay2, set: setReplay2 },
-          { label: `Game 3 Replay`, value: replay3, set: setReplay3, optional: bo3Score !== "2-1" },
-        ].map(({ label, value, set, optional }) => (
+          { label: "Game 1 Replay", value: replay1, set: setReplay1, gameLabel: "Game 1" },
+          { label: "Game 2 Replay", value: replay2, set: setReplay2, gameLabel: "Game 2" },
+          { label: `Game 3 Replay`, value: replay3, set: setReplay3, optional: bo3Score !== "2-1", gameLabel: "Game 3" },
+        ].map(({ label, value, set, optional, gameLabel }) => (
           <div key={label} className="space-y-1">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               {label} {optional && <span className="opacity-50">(if played)</span>}
@@ -210,6 +216,18 @@ function MatchCard({ match, teamName }: { match: ScheduleMatch; teamName: (id: s
                 </a>
               )}
             </div>
+            {value && (
+              <ParseReplayButton
+                replayUrl={value}
+                replayLabel={gameLabel}
+                seasonId={seasonId}
+                homeTeamId={match.homeTeam}
+                awayTeamId={match.awayTeam}
+                homeTeamName={homeName}
+                awayTeamName={awayName}
+                matchId={match.id}
+              />
+            )}
           </div>
         ))}
       </div>
@@ -227,11 +245,13 @@ function MatchCard({ match, teamName }: { match: ScheduleMatch; teamName: (id: s
 
 // ─── Week tab ─────────────────────────────────────────────────────────────────
 
-function WeekTab({ week, matches, teamName, standings }: {
+function WeekTab({ week, matches, teamName, standings, seasonId, teams }: {
   week: number;
   matches: ScheduleMatch[];
   teamName: (id: string) => string;
   standings: StandingRow[];
+  seasonId: string;
+  teams: Team[];
 }) {
   const weekMatches  = matches.filter(m => m.week === week);
   const realMatches  = weekMatches.filter(m => !m.isBye);
@@ -266,7 +286,7 @@ function WeekTab({ week, matches, teamName, standings }: {
       <div className="space-y-4">
         <h2 className="text-xl font-black">Week {week} Matches</h2>
         {realMatches.map(match => (
-          <MatchCard key={match.id} match={match} teamName={teamName} />
+          <MatchCard key={match.id} match={match} teamName={teamName} seasonId={seasonId} teams={teams} />
         ))}
       </div>
 
@@ -362,7 +382,7 @@ export function ScheduleClient({ matches, teams, initialWeek, playoffMatches, se
         />
       )}
       {typeof activeTab === "number" && (
-        <WeekTab week={activeTab} matches={matches} teamName={teamName} standings={standings} />
+        <WeekTab week={activeTab} matches={matches} teamName={teamName} standings={standings} seasonId={seasonId} teams={teams} />
       )}
     </div>
   );
