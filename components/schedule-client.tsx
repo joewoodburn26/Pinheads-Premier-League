@@ -103,10 +103,11 @@ function ByeWeekBanner({ byeTeamName }: { byeTeamName: string }) {
 
 // ─── Match card ───────────────────────────────────────────────────────────────
 
-function MatchCard({ match, teamName, seasonId }: {
+function MatchCard({ match, teamName, seasonId, parsedReplays }: {
   match: ScheduleMatch;
   teamName: (id: string) => string;
   seasonId: string;
+  parsedReplays: string[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [winner,   setWinner]   = useState(match.winner ?? "");
@@ -222,6 +223,7 @@ function MatchCard({ match, teamName, seasonId }: {
                 seasonId={seasonId}
                 homeTeamId={match.homeTeam}
                 awayTeamId={match.awayTeam}
+                isParsed={parsedReplays.includes(value)}
               />
             )}
           </div>
@@ -241,12 +243,13 @@ function MatchCard({ match, teamName, seasonId }: {
 
 // ─── Week tab ─────────────────────────────────────────────────────────────────
 
-function WeekTab({ week, matches, teamName, standings, seasonId }: {
+function WeekTab({ week, matches, teamName, standings, seasonId, parsedReplays }: {
   week: number;
   matches: ScheduleMatch[];
   teamName: (id: string) => string;
   standings: StandingRow[];
   seasonId: string;
+  parsedReplays: string[];
 }) {
   const weekMatches  = matches.filter(m => m.week === week);
   const realMatches  = weekMatches.filter(m => !m.isBye);
@@ -281,7 +284,7 @@ function WeekTab({ week, matches, teamName, standings, seasonId }: {
       <div className="space-y-4">
         <h2 className="text-xl font-black">Week {week} Matches</h2>
         {realMatches.map(match => (
-          <MatchCard key={match.id} match={match} teamName={teamName} seasonId={seasonId} />
+          <MatchCard key={match.id} match={match} teamName={teamName} seasonId={seasonId} parsedReplays={parsedReplays} />
         ))}
       </div>
 
@@ -292,12 +295,13 @@ function WeekTab({ week, matches, teamName, standings, seasonId }: {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function ScheduleClient({ matches, teams, initialWeek, playoffMatches, seasonId }: {
+export function ScheduleClient({ matches, teams, initialWeek, playoffMatches, seasonId, parsedReplays }: {
   matches: ScheduleMatch[];
   teams: Team[];
   initialWeek: number;
   playoffMatches: PlayoffMatch[];
   seasonId: string;
+  parsedReplays: string[];
 }) {
   const realMatches = matches.filter(m => !m.isBye);
   const weeks = [...new Set(matches.map(m => m.week))].sort((a, b) => a - b);
@@ -377,7 +381,7 @@ export function ScheduleClient({ matches, teams, initialWeek, playoffMatches, se
         />
       )}
       {typeof activeTab === "number" && (
-        <WeekTab week={activeTab} matches={matches} teamName={teamName} standings={standings} seasonId={seasonId} />
+        <WeekTab week={activeTab} matches={matches} teamName={teamName} standings={standings} seasonId={seasonId} parsedReplays={parsedReplays} />
       )}
     </div>
   );

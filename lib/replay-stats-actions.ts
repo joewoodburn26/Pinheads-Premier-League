@@ -8,22 +8,17 @@ import { fetchAndParseReplay } from "@/lib/replay-parser";
 export interface ParseReplayResult {
   ok: boolean;
   error?: string;
+  alreadyParsed?: boolean;
   parsed?: {
-    p1: string;
-    p2: string;
-    winner: string;
-    gameCount: number;
+    p1: string; p2: string; winner: string; gameCount: number;
     pokemonStats: {
-      name: string;
-      player: string;
-      gamesPlayed: number;
-      kos: number;
-      deaths: number;
-      movesUsed: string[];
-      matched: boolean; // whether we found this pokemon in our DB
+      name: string; player: string; gamesPlayed: number;
+      kos: number; deaths: number; movesUsed: string[]; matched: boolean;
     }[];
   };
 }
+
+// ── Parse and save a replay ───────────────────────────────────────────────────
 
 export async function parseAndSaveReplayStats(
   replayUrl: string,
@@ -34,27 +29,29 @@ export async function parseAndSaveReplayStats(
   if (!replayUrl?.trim()) return { ok: false, error: "No replay URL provided" };
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase not configured" };
 
+  const supabase = createSupabaseAdminClient();
+
+  // Check if already parsed
+  const { data: existing } = await supabase
+    .from("replay_imports")
+    .select("id")
+    .eq("replay_url", replayUrl)
+    .maybeSingle();
+
+  if (existing) return { ok: false, alreadyParsed: true, error: "This replay has already been parsed." };
+
   try {
-    // 1. Fetch and parse the replay
     const replay = await fetchAndParseReplay(replayUrl);
-    const supabase = createSupabaseAdminClient();
 
-    // 2. Get rosters for both teams so we can match pokemon names to IDs
+    // Build roster lookup
     const { data: homeSlots } = await supabase
-      .from("team_pokemon")
-      .select("id, pokemon_id, pokemon:pokemon(id, name)")
-      .eq("team_id", homeTeamId)
-      .eq("season_id", seasonId);
-
+      .from("team_pokemon").select("id, pokemon_id, pokemon:pokemon(id, name)")
+      .eq("team_id", homeTeamId).eq("season_id", seasonId);
     const { data: awaySlots } = await supabase
-      .from("team_pokemon")
-      .select("id, pokemon_id, pokemon:pokemon(id, name)")
-      .eq("team_id", awayTeamId)
-      .eq("season_id", seasonId);
+      .from("team_pokemon").select("id, pokemon_id, pokemon:pokemon(id, name)")
+      .eq("team_id", awayTeamId).eq("season_id", seasonId);
 
-    // Build lookup: normalized name -> { pokemonId, teamId }
     const rosterLookup = new Map<string, { pokemonId: string; teamId: string }>();
-
     for (const slot of homeSlots ?? []) {
       const mon = Array.isArray(slot.pokemon) ? slot.pokemon[0] : slot.pokemon as { id: string; name: string } | null;
       if (mon) rosterLookup.set(mon.name.toLowerCase(), { pokemonId: mon.id, teamId: homeTeamId });
@@ -64,89 +61,165 @@ export async function parseAndSaveReplayStats(
       if (mon) rosterLookup.set(mon.name.toLowerCase(), { pokemonId: mon.id, teamId: awayTeamId });
     }
 
-    // 3. Determine which team is p1 and p2 based on match winner
-    // We match by checking which coach name appears in p1/p2
-    // (Showdown usernames may differ from coach names, so we do fuzzy match)
-    // For now, we save stats against the team that owned the pokemon
-
     const resultStats = [];
 
     for (const monStats of replay.pokemon) {
       const normalizedName = monStats.name.toLowerCase();
-      const roster = rosterLookup.get(normalizedName);
-
-      // Try partial match if exact fails
-      let rosterEntry = roster;
+      let rosterEntry = rosterLookup.get(normalizedName);
       if (!rosterEntry) {
         for (const [key, val] of rosterLookup.entries()) {
-          if (key.includes(normalizedName) || normalizedName.includes(key)) {
-            rosterEntry = val;
-            break;
-          }
+          if (key.includes(normalizedName) || normalizedName.includes(key)) { rosterEntry = val; break; }
         }
       }
 
       resultStats.push({
-        name: monStats.name,
-        player: monStats.player,
-        gamesPlayed: monStats.gamesPlayed,
-        kos: monStats.kos,
-        deaths: monStats.deaths,
-        movesUsed: monStats.movesUsed,
+        name: monStats.name, player: monStats.player,
+        gamesPlayed: monStats.gamesPlayed, kos: monStats.kos,
+        deaths: monStats.deaths, movesUsed: monStats.movesUsed,
         matched: !!rosterEntry,
       });
 
       if (!rosterEntry) continue;
 
-      // 4. Upsert into pokemon_stats
-      // Check if a record already exists for this pokemon/team/season/match
-      const { data: existing } = await supabase
-        .from("pokemon_stats")
-        .select("id, games_played, wins, losses, kos, deaths")
-        .eq("season_id", seasonId)
-        .eq("team_id", rosterEntry.teamId)
-        .eq("pokemon_id", rosterEntry.pokemonId)
-        .maybeSingle();
+      const { data: existingStats } = await supabase
+        .from("pokemon_stats").select("id, games_played, kos, deaths")
+        .eq("season_id", seasonId).eq("team_id", rosterEntry.teamId)
+        .eq("pokemon_id", rosterEntry.pokemonId).maybeSingle();
 
-      if (existing) {
-        // Update existing record (accumulate stats)
-        await supabase
-          .from("pokemon_stats")
-          .update({
-            games_played: (existing.games_played ?? 0) + monStats.gamesPlayed,
-            kos: (existing.kos ?? 0) + monStats.kos,
-            deaths: (existing.deaths ?? 0) + monStats.deaths,
-          })
-          .eq("id", existing.id);
+      if (existingStats) {
+        await supabase.from("pokemon_stats").update({
+          games_played: (existingStats.games_played ?? 0) + monStats.gamesPlayed,
+          kos:          (existingStats.kos ?? 0)          + monStats.kos,
+          deaths:       (existingStats.deaths ?? 0)       + monStats.deaths,
+        }).eq("id", existingStats.id);
       } else {
-        // Insert new record
         await supabase.from("pokemon_stats").insert({
-          season_id: seasonId,
-          team_id: rosterEntry.teamId,
+          season_id: seasonId, team_id: rosterEntry.teamId,
           pokemon_id: rosterEntry.pokemonId,
-          games_played: monStats.gamesPlayed,
-          wins: 0,
-          losses: 0,
-          kos: monStats.kos,
-          deaths: monStats.deaths,
+          games_played: monStats.gamesPlayed, wins: 0, losses: 0,
+          kos: monStats.kos, deaths: monStats.deaths,
         });
       }
     }
 
-    revalidatePath("/stats");
-    revalidatePath("/schedule");
+    // Record that this replay was parsed
+    await supabase.from("replay_imports").insert({
+      replay_url: replayUrl,
+      season_id:  seasonId,
+      parsed_at:  new Date().toISOString(),
+    });
 
+    revalidatePath("/stats");
     return {
       ok: true,
-      parsed: {
-        p1: replay.p1,
-        p2: replay.p2,
-        winner: replay.winner,
-        gameCount: replay.gameCount,
-        pokemonStats: resultStats,
-      },
+      parsed: { p1: replay.p1, p2: replay.p2, winner: replay.winner, gameCount: replay.gameCount, pokemonStats: resultStats },
     };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
   }
+}
+
+// ── Reset a single replay's stats ─────────────────────────────────────────────
+
+export async function resetReplayStats(
+  replayUrl: string,
+  seasonId: string,
+  homeTeamId: string,
+  awayTeamId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase not configured" };
+  const supabase = createSupabaseAdminClient();
+
+  try {
+    // Re-fetch and parse the replay to know what to subtract
+    const replay = await fetchAndParseReplay(replayUrl);
+
+    const { data: homeSlots } = await supabase
+      .from("team_pokemon").select("id, pokemon_id, pokemon:pokemon(id, name)")
+      .eq("team_id", homeTeamId).eq("season_id", seasonId);
+    const { data: awaySlots } = await supabase
+      .from("team_pokemon").select("id, pokemon_id, pokemon:pokemon(id, name)")
+      .eq("team_id", awayTeamId).eq("season_id", seasonId);
+
+    const rosterLookup = new Map<string, { pokemonId: string; teamId: string }>();
+    for (const slot of homeSlots ?? []) {
+      const mon = Array.isArray(slot.pokemon) ? slot.pokemon[0] : slot.pokemon as { id: string; name: string } | null;
+      if (mon) rosterLookup.set(mon.name.toLowerCase(), { pokemonId: mon.id, teamId: homeTeamId });
+    }
+    for (const slot of awaySlots ?? []) {
+      const mon = Array.isArray(slot.pokemon) ? slot.pokemon[0] : slot.pokemon as { id: string; name: string } | null;
+      if (mon) rosterLookup.set(mon.name.toLowerCase(), { pokemonId: mon.id, teamId: awayTeamId });
+    }
+
+    for (const monStats of replay.pokemon) {
+      const normalizedName = monStats.name.toLowerCase();
+      let rosterEntry = rosterLookup.get(normalizedName);
+      if (!rosterEntry) {
+        for (const [key, val] of rosterLookup.entries()) {
+          if (key.includes(normalizedName) || normalizedName.includes(key)) { rosterEntry = val; break; }
+        }
+      }
+      if (!rosterEntry) continue;
+
+      const { data: existing } = await supabase
+        .from("pokemon_stats").select("id, games_played, kos, deaths")
+        .eq("season_id", seasonId).eq("team_id", rosterEntry.teamId)
+        .eq("pokemon_id", rosterEntry.pokemonId).maybeSingle();
+
+      if (existing) {
+        await supabase.from("pokemon_stats").update({
+          games_played: Math.max(0, (existing.games_played ?? 0) - monStats.gamesPlayed),
+          kos:          Math.max(0, (existing.kos ?? 0)          - monStats.kos),
+          deaths:       Math.max(0, (existing.deaths ?? 0)       - monStats.deaths),
+        }).eq("id", existing.id);
+      }
+    }
+
+    // Remove the import record so it can be re-parsed
+    await supabase.from("replay_imports").delete().eq("replay_url", replayUrl);
+
+    revalidatePath("/stats");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
+// ── Reset ALL stats for a season ──────────────────────────────────────────────
+
+export async function resetAllStats(seasonId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase not configured" };
+  const supabase = createSupabaseAdminClient();
+  await supabase.from("pokemon_stats").delete().eq("season_id", seasonId);
+  await supabase.from("replay_imports").delete().eq("season_id", seasonId);
+  revalidatePath("/stats");
+  return { ok: true };
+}
+
+// ── Update a single pokemon's stats manually ──────────────────────────────────
+
+export async function updatePokemonStats(
+  statId: string,
+  gamesPlayed: number,
+  kos: number,
+  deaths: number,
+): Promise<{ ok: boolean }> {
+  if (!hasSupabaseEnv()) return { ok: false };
+  await createSupabaseAdminClient()
+    .from("pokemon_stats")
+    .update({ games_played: gamesPlayed, kos, deaths })
+    .eq("id", statId);
+  revalidatePath("/stats");
+  return { ok: true };
+}
+
+// ── Get parsed replays for a season ──────────────────────────────────────────
+
+export async function getParsedReplays(seasonId: string): Promise<string[]> {
+  if (!hasSupabaseEnv()) return [];
+  const { data } = await createSupabaseAdminClient()
+    .from("replay_imports")
+    .select("replay_url")
+    .eq("season_id", seasonId);
+  return (data ?? []).map(r => r.replay_url).filter(Boolean);
 }
