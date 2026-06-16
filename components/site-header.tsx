@@ -16,8 +16,7 @@ const nav = [
 
 const settingsNav = [
   ["Point Restructure", "/settings/point-restructure"],
-  ["Team Management",   "/settings/team-management"],
-  ["Season Management", "/settings/seasons"],
+  ["Season & Team Management", "/settings/seasons"],
 ];
 
 export function SiteHeader({
