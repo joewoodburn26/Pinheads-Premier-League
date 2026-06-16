@@ -169,8 +169,7 @@ export function parseReplayLog(log: string, format: string): Omit<ReplayParseRes
       // ||-status|p2a: Whimsicott|tox
       const targetSlotInfo = parseSlot(parts[2] ?? "");
       if (!targetSlotInfo) continue;
-      // Who set it? Check [from] tags or attribute to opposing active mon
-      const fromStr = parts[4] ?? "";
+      // Who set it? Check [of] tag or attribute to opposing active mon
       const ofStr   = parts[5] ?? "";
 
       let setter: { player: "p1" | "p2"; name: string } | null = null;
