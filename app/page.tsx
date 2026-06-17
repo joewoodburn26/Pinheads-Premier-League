@@ -2,15 +2,18 @@ import Image from "next/image";
 import { Trophy, Zap } from "lucide-react";
 import { TeamCard } from "@/components/team-card";
 import { Card } from "@/components/ui/card";
-import { getActiveSeason, getTeams, getRoster, getStats } from "@/lib/data";
+import { getActiveSeason, getTeams, getRoster, getStats, getSchedule } from "@/lib/data";
 import { winPct } from "@/lib/utils";
 import type { Pokemon } from "@/lib/types";
 
+export const revalidate = 0;
+
 export default async function HomePage() {
   const season = await getActiveSeason();
-  const [teams, allStats] = await Promise.all([
+  const [teams, allStats, matches] = await Promise.all([
     getTeams(season?.id),
     getStats(season?.id),
+    getSchedule(season?.id ?? ""),
   ]);
 
   // Get top Pokémon per team (highest point value)
@@ -24,11 +27,27 @@ export default async function HomePage() {
     if (top?.pokemon) topPokemonMap[team.id] = top.pokemon;
   });
 
-  // Standings leader
+  // Calculate battle differential from schedule matches
+  const battleDiffMap: Record<string, number> = {};
+  for (const match of matches) {
+    if (match.isBye) continue;
+    if (match.homeTeam) {
+      battleDiffMap[match.homeTeam] = (battleDiffMap[match.homeTeam] ?? 0) + (match.homeDiff ?? 0);
+    }
+    if (match.awayTeam) {
+      battleDiffMap[match.awayTeam] = (battleDiffMap[match.awayTeam] ?? 0) + (match.awayDiff ?? 0);
+    }
+  }
+
+  // Sort standings: wins → battle diff → alphabetical
   const sorted = [...teams].sort((a, b) => {
     if (b.wins !== a.wins) return b.wins - a.wins;
-    return parseFloat(winPct(b.wins, b.losses)) - parseFloat(winPct(a.wins, a.losses));
+    const diffA = battleDiffMap[a.id] ?? 0;
+    const diffB = battleDiffMap[b.id] ?? 0;
+    if (diffB !== diffA) return diffB - diffA;
+    return a.teamName.localeCompare(b.teamName);
   });
+
   const leader = sorted[0];
 
   // Top 3 Pokémon by KOs
@@ -42,7 +61,6 @@ export default async function HomePage() {
 
       {/* ── Hero Banner ───────────────────────────────────────────────────── */}
       <section className="pokeball-bg theme-glow-bg relative rounded-2xl border border-white/5 px-8 py-14 text-center overflow-hidden">
-        {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-br from-[#DC2626]/10 via-transparent to-[#D97706]/10 rounded-2xl pointer-events-none" />
 
         <p className="theme-accent-2 text-sm font-bold uppercase tracking-[.3em] mb-3">
@@ -57,7 +75,7 @@ export default async function HomePage() {
           {season?.name} · {teams.length} teams competing for the championship
         </p>
 
-        {/* Season record strip */}
+        {/* Top 3 standings strip */}
         <div className="mt-8 flex flex-wrap justify-center gap-6">
           {sorted.slice(0, 3).map((team, idx) => (
             <div key={team.id} className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm">
@@ -92,9 +110,9 @@ export default async function HomePage() {
               <Image
                 src={topPokemonMap[leader.id].spriteUrl}
                 alt=""
-                width={72}
-                height={72}
-                className="size-16 object-contain ml-auto shrink-0"
+                width={120}
+                height={120}
+                className="size-28 object-contain ml-auto shrink-0"
               />
             )}
           </Card>
