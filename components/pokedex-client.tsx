@@ -69,17 +69,19 @@ function PointEditor({ mon }: { mon: Pokemon }) {
 }
 
 export function PokedexClient({ pokemon }: { pokemon: (Pokemon & { banned?: boolean })[] }) {
-  const [query,     setQuery]     = useState("");
-  const [tab,       setTab]       = useState<FilterTab>("all");
+  const [query,      setQuery]      = useState("");
+  const [tab,        setTab]        = useState<FilterTab>("all");
   const [typeFilter, setTypeFilter] = useState<PokemonType | "">("");
+  const [page,       setPage]       = useState(1);
+  const [pageSize,   setPageSize]   = useState(100);
 
   const tabs: { key: FilterTab; label: string }[] = [
-    { key: "all",       label: `All (${pokemon.length})`                         },
+    { key: "all",       label: `All (${pokemon.length})`                          },
     { key: "active",    label: `Active (${pokemon.filter(p => !p.banned).length})` },
     { key: "banned",    label: `Banned (${pokemon.filter(p => p.banned).length})`  },
-    { key: "legendary", label: `Legendary`                                        },
-    { key: "mythical",  label: `Mythical`                                         },
-    { key: "paradox",   label: `Paradox`                                          },
+    { key: "legendary", label: `Legendary`                                         },
+    { key: "mythical",  label: `Mythical`                                          },
+    { key: "paradox",   label: `Paradox`                                           },
   ];
 
   const filtered = useMemo(() => {
@@ -95,6 +97,14 @@ export function PokedexClient({ pokemon }: { pokemon: (Pokemon & { banned?: bool
       return true;
     });
   }, [pokemon, query, tab, typeFilter]);
+
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const paginated  = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  // Reset to page 1 when filters change
+  function handleTabChange(t: FilterTab) { setTab(t); setPage(1); }
+  function handleQuery(q: string)        { setQuery(q); setPage(1); }
+  function handleType(t: string)         { setTypeFilter(t as PokemonType | ""); setPage(1); }
 
   const types: PokemonType[] = [
     "Normal","Fire","Water","Electric","Grass","Ice","Fighting","Poison",
@@ -113,7 +123,7 @@ export function PokedexClient({ pokemon }: { pokemon: (Pokemon & { banned?: bool
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 border-b pb-2">
         {tabs.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)}
+          <button key={t.key} onClick={() => handleTabChange(t.key)}
             className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
               tab === t.key ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"
             }`}>
@@ -126,16 +136,28 @@ export function PokedexClient({ pokemon }: { pokemon: (Pokemon & { banned?: bool
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-2.5 text-muted-foreground" size={16} />
-          <Input className="pl-9" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search Pokémon…" />
+          <Input className="pl-9" value={query} onChange={e => handleQuery(e.target.value)} placeholder="Search Pokémon…" />
         </div>
-        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as PokemonType | "")}
+        <select value={typeFilter} onChange={e => handleType(e.target.value)}
           className="rounded-md border bg-background px-3 py-2 text-sm">
           <option value="">All Types</option>
           {types.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
       </div>
 
-      <p className="text-xs text-muted-foreground">{filtered.length} Pokémon shown</p>
+      {/* Count + page size */}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+        <p className="text-muted-foreground">{filtered.length} Pokémon · Page {page} of {totalPages}</p>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Show:</span>
+          {[25, 50, 100, 250].map(s => (
+            <button key={s} onClick={() => { setPageSize(s); setPage(1); }}
+              className={`rounded px-2 py-1 text-xs font-medium transition-colors ${pageSize === s ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Table */}
       <div className="overflow-hidden rounded-lg border">
@@ -152,7 +174,7 @@ export function PokedexClient({ pokemon }: { pokemon: (Pokemon & { banned?: bool
             </tr>
           </thead>
           <tbody>
-            {filtered.map(mon => (
+            {paginated.map(mon => (
               <tr key={mon.id} className={`border-t transition-colors ${mon.banned ? "opacity-50 bg-destructive/5" : "hover:bg-muted/20"}`}>
                 <td className="p-3 text-xs text-muted-foreground font-mono">
                   #{String(mon.dexNumber).padStart(4, "0")}
@@ -185,6 +207,21 @@ export function PokedexClient({ pokemon }: { pokemon: (Pokemon & { banned?: bool
           </tbody>
         </table>
       </div>
+
+      {/* Pagination controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <button onClick={() => setPage(1)} disabled={page === 1}
+            className="rounded-md px-3 py-2 text-sm bg-muted hover:bg-muted/80 disabled:opacity-40">«</button>
+          <button onClick={() => setPage(p => p - 1)} disabled={page === 1}
+            className="rounded-md px-3 py-2 text-sm bg-muted hover:bg-muted/80 disabled:opacity-40">← Prev</button>
+          <span className="text-sm text-muted-foreground px-2">Page {page} of {totalPages}</span>
+          <button onClick={() => setPage(p => p + 1)} disabled={page === totalPages}
+            className="rounded-md px-3 py-2 text-sm bg-muted hover:bg-muted/80 disabled:opacity-40">Next →</button>
+          <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
+            className="rounded-md px-3 py-2 text-sm bg-muted hover:bg-muted/80 disabled:opacity-40">»</button>
+        </div>
+      )}
     </div>
   );
 }
