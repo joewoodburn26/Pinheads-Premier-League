@@ -38,17 +38,33 @@ export async function getTeam(id: string) {
   return all.find((team) => team.id === id) ?? teams.find((team) => team.id === id);
 }
 
-export async function getPokemon() {
+export async function getAllPokemon() {
   if (!hasSupabaseEnv()) return pokemon;
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.from("pokemon").select("*").order("point_value", { ascending: false });
+  const { data } = await supabase.from("pokemon").select("*").order("dex_number", { ascending: true });
   return (data ?? []).map((row) => ({
     id: row.id, dexNumber: row.dex_number, name: row.name, spriteUrl: row.sprite_url,
     primaryType: row.primary_type, secondaryType: row.secondary_type,
     hp: row.hp, attack: row.attack, defense: row.defense,
     specialAttack: row.special_attack, specialDefense: row.special_defense,
     speed: row.speed, bst: row.bst, pointValue: row.point_value,
-    legendary: row.legendary, mythical: row.mythical, paradox: row.paradox
+    legendary: row.legendary, mythical: row.mythical, paradox: row.paradox,
+    banned: row.banned ?? false,
+  }));
+}
+
+export async function getPokemon() {
+  if (!hasSupabaseEnv()) return pokemon;
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase.from("pokemon").select("*").eq("banned", false).order("point_value", { ascending: false });
+  return (data ?? []).map((row) => ({
+    id: row.id, dexNumber: row.dex_number, name: row.name, spriteUrl: row.sprite_url,
+    primaryType: row.primary_type, secondaryType: row.secondary_type,
+    hp: row.hp, attack: row.attack, defense: row.defense,
+    specialAttack: row.special_attack, specialDefense: row.special_defense,
+    speed: row.speed, bst: row.bst, pointValue: row.point_value,
+    legendary: row.legendary, mythical: row.mythical, paradox: row.paradox,
+    banned: row.banned ?? false,
   }));
 }
 

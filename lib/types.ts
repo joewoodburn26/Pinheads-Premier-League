@@ -44,6 +44,7 @@ export type Pokemon = {
   legendary: boolean;
   mythical: boolean;
   paradox: boolean;
+  banned?: boolean;
 };
 
 export type TeamPokemon = {
