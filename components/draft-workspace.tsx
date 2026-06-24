@@ -490,13 +490,14 @@ function exportToPdf(slots: BuilderSlot[], budget: number, seasonName?: string) 
 // ─── Team Builder sidebar ─────────────────────────────────────────────────────
 
 function TeamBuilder({
-  slots, onRemove, onNoteChange, onClear, budget,
+  slots, onRemove, onNoteChange, onClear, budget, seasonName,
 }: {
   slots: BuilderSlot[];
   onRemove: (id: string) => void;
   onNoteChange: (id: string, note: string) => void;
   onClear: () => void;
   budget: number;
+  seasonName?: string;
 }) {
   const [shareMsg, setShareMsg] = useState("");
   const used    = slots.reduce((s, b) => s + b.pokemon.pointValue, 0);
@@ -895,6 +896,7 @@ export function DraftWorkspace({ pokemon, budget, seasonName }: { pokemon: Pokem
             onNoteChange={updateNote}
             onClear={() => setSlots([])}
             budget={budget}
+            seasonName={seasonName}
           />
         </div>
       </aside>
