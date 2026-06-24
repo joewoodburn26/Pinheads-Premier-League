@@ -263,66 +263,228 @@ function decodeTeam(encoded: string, allPokemon: Pokemon[]): BuilderSlot[] {
 
 // ─── PDF export ───────────────────────────────────────────────────────────────
 
-function exportToPdf(slots: BuilderSlot[], budget: number) {
-  const used = slots.reduce((sum, s) => sum + s.pokemon.pointValue, 0);
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Draft Team Sheet</title>
-      <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: sans-serif; background: #fff; color: #111; padding: 24px; }
-        h1 { font-size: 24px; font-weight: 900; margin-bottom: 4px; }
-        .subtitle { font-size: 13px; color: #666; margin-bottom: 20px; }
-        .team-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
-        .card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; text-align: center; }
-        .card img { width: 64px; height: 64px; object-fit: contain; }
-        .card .name { font-weight: 700; font-size: 13px; margin: 4px 0; }
-        .card .pts { font-size: 18px; font-weight: 900; color: #333; }
-        .card .types { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; margin: 4px 0; }
-        .type-badge { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; color: white; }
-        .card .note { font-size: 11px; color: #555; margin-top: 6px; font-style: italic; text-align: left; border-top: 1px solid #eee; padding-top: 4px; }
-        .stats { font-size: 10px; color: #666; margin-top: 4px; text-align: left; }
-        .summary { display: flex; gap: 16px; font-size: 13px; border-top: 2px solid #111; padding-top: 12px; }
-        .summary b { font-size: 20px; }
-        @media print { body { padding: 12px; } }
-      </style>
-    </head>
-    <body>
-      <h1>Pinheads Premier League — Draft Team Sheet</h1>
-      <p class="subtitle">Points used: ${used} / ${budget} &nbsp;|&nbsp; ${slots.length} Pokémon &nbsp;|&nbsp; ${new Date().toLocaleDateString()}</p>
-      <div class="team-grid">
-        ${slots.map(({ pokemon: mon, note }) => {
-          const types = [mon.primaryType, mon.secondaryType].filter(Boolean) as PokemonType[];
-          const typeHtml = types.map(t => `<span class="type-badge" style="background:${typeColors[t]}">${t}</span>`).join("");
+function exportToPdf(slots: BuilderSlot[], budget: number, seasonName?: string) {
+  const used    = slots.reduce((sum, s) => sum + s.pokemon.pointValue, 0);
+  const avgBst  = Math.round(slots.reduce((s, b) => s + b.pokemon.bst, 0) / Math.max(1, slots.length));
+  const date    = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
+  // Type coverage: count how many mons cover each type offensively
+  const allTypes = ["Normal","Fire","Water","Electric","Grass","Ice","Fighting","Poison","Ground","Flying","Psychic","Bug","Rock","Ghost","Dragon","Dark","Steel","Fairy"];
+  const typeColorMap: Record<string, string> = {
+    Normal:"#9099A1",Fire:"#FF9C54",Water:"#4D90D5",Electric:"#F3D23B",Grass:"#63BB5B",
+    Ice:"#74CEC0",Fighting:"#CE4069",Poison:"#AB6AC8",Ground:"#D97746",Flying:"#89AAE3",
+    Psychic:"#F97176",Bug:"#90C12C",Rock:"#C9B78B",Ghost:"#5269AC",Dragon:"#0A6DC4",
+    Dark:"#5A5366",Steel:"#5A8EA1",Fairy:"#EC8FE6",
+  };
+
+  // Speed tiers sorted
+  const bySpeed = [...slots].sort((a, b) => b.pokemon.speed - a.pokemon.speed);
+  const maxSpeed = bySpeed[0]?.pokemon.speed ?? 1;
+
+  // Role breakdown
+  const roles = slots.map(({ pokemon: mon }) => {
+    const max = Math.max(mon.attack, mon.specialAttack, mon.defense, mon.specialDefense);
+    if (max === mon.attack)        return "Physical";
+    if (max === mon.specialAttack) return "Special";
+    return "Defensive";
+  });
+  const roleCount = { Physical: roles.filter(r => r === "Physical").length, Special: roles.filter(r => r === "Special").length, Defensive: roles.filter(r => r === "Defensive").length };
+
+  // Stat bar helper
+  function bar(val: number, max: number, color: string): string {
+    const pct = Math.min(100, Math.round((val / max) * 100));
+    return `<div style="display:flex;align-items:center;gap:6px;margin:2px 0;">
+      <div style="width:100%;height:5px;background:#333;border-radius:3px;overflow:hidden;">
+        <div style="width:${pct}%;height:100%;background:${color};border-radius:3px;"></div>
+      </div>
+      <span style="font-size:10px;width:24px;text-align:right;color:#ccc;">${val}</span>
+    </div>`;
+  }
+
+  function statColor(v: number): string {
+    if (v >= 150) return "#60a5fa";
+    if (v >= 120) return "#4ade80";
+    if (v >= 90)  return "#86efac";
+    if (v >= 60)  return "#facc15";
+    if (v >= 30)  return "#fb923c";
+    return "#f87171";
+  }
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>PPL Draft Team Sheet</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e2e8f0; padding: 32px; }
+
+    /* Header */
+    .header { margin-bottom: 28px; padding-bottom: 20px; border-bottom: 2px solid #1e293b; }
+    .league-label { font-size: 11px; font-weight: 700; letter-spacing: .25em; color: #f97316; text-transform: uppercase; margin-bottom: 6px; }
+    .title { font-size: 36px; font-weight: 900; line-height: 1; margin-bottom: 6px; }
+    .title span { color: #dc2626; }
+    .title span.league { color: #f97316; }
+    .subtitle { font-size: 13px; color: #64748b; }
+
+    /* Summary bar */
+    .summary-bar { display: flex; gap: 24px; background: #1e293b; border-radius: 12px; padding: 16px 24px; margin-bottom: 28px; }
+    .summary-item { text-align: center; }
+    .summary-item .val { font-size: 28px; font-weight: 900; color: #f97316; line-height: 1; }
+    .summary-item .lbl { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+    /* Pokemon grid */
+    .pokemon-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 28px; }
+    .poke-card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 12px; text-align: center; }
+    .poke-card img { width: 72px; height: 72px; object-fit: contain; image-rendering: pixelated; }
+    .poke-name { font-weight: 800; font-size: 13px; margin: 6px 0 2px; }
+    .poke-pts { font-size: 22px; font-weight: 900; color: #f97316; line-height: 1; margin-bottom: 4px; }
+    .poke-pts span { font-size: 11px; font-weight: 500; color: #64748b; }
+    .types { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; margin: 6px 0; }
+    .type-badge { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; color: white; text-transform: uppercase; }
+    .bst-row { font-size: 10px; color: #f97316; font-weight: 700; margin: 6px 0 4px; }
+    .note { font-size: 10px; color: #94a3b8; margin-top: 8px; font-style: italic; text-align: left; border-top: 1px solid #334155; padding-top: 6px; }
+
+    /* Bottom sections */
+    .bottom-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .section { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 14px; }
+    .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #f97316; margin-bottom: 10px; }
+
+    /* Speed tiers */
+    .speed-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 11px; }
+    .speed-rank { color: #64748b; width: 14px; }
+    .speed-name { width: 80px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .speed-bar-wrap { flex: 1; height: 5px; background: #334155; border-radius: 3px; overflow: hidden; }
+    .speed-bar { height: 100%; background: #facc15; border-radius: 3px; }
+    .speed-val { color: #ccc; width: 28px; text-align: right; }
+
+    /* Role balance */
+    .role-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 11px; }
+    .role-name { width: 70px; color: #94a3b8; }
+    .role-bar-wrap { flex: 1; height: 8px; background: #334155; border-radius: 4px; overflow: hidden; }
+    .role-count { color: #e2e8f0; font-weight: 700; width: 16px; text-align: right; }
+
+    /* Type coverage */
+    .type-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+    .type-cell { border-radius: 4px; padding: 3px 2px; text-align: center; }
+    .type-cell .tn { font-size: 8px; font-weight: 700; }
+    .type-cell .tc { font-size: 9px; font-weight: 900; }
+
+    @media print {
+      body { padding: 16px; background: #0f1117 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="league-label">Pokémon Draft League</div>
+    <div class="title"><span>Pinheads</span> Premier <span class="league">League</span></div>
+    <div class="subtitle">Draft Team Sheet &nbsp;·&nbsp; ${seasonName ?? "Draft Room"} &nbsp;·&nbsp; ${slots.length} Pokémon &nbsp;·&nbsp; ${date}</div>
+  </div>
+
+  <!-- Summary bar -->
+  <div class="summary-bar">
+    <div class="summary-item"><div class="val">${used}</div><div class="lbl">Points Used</div></div>
+    <div class="summary-item"><div class="val" style="color:${used > budget ? "#f87171" : "#4ade80"}">${budget - used}</div><div class="lbl">Points Left</div></div>
+    <div class="summary-item"><div class="val">${slots.length}</div><div class="lbl">Pokémon</div></div>
+    <div class="summary-item"><div class="val">${avgBst}</div><div class="lbl">Avg BST</div></div>
+    <div class="summary-item"><div class="val">${bySpeed[0]?.pokemon.speed ?? "—"}</div><div class="lbl">Fastest Speed</div></div>
+  </div>
+
+  <!-- Pokémon grid -->
+  <div class="pokemon-grid">
+    ${slots.map(({ pokemon: mon, note }) => {
+      const types = [mon.primaryType, mon.secondaryType].filter(Boolean) as PokemonType[];
+      const typeHtml = types.map(t => `<span class="type-badge" style="background:${typeColorMap[t]}">${t}</span>`).join("");
+      return `
+        <div class="poke-card">
+          <img src="${mon.spriteUrl}" alt="${mon.name}" />
+          <div class="poke-name">${mon.name}</div>
+          <div class="poke-pts">${mon.pointValue}<span>pts</span></div>
+          <div class="types">${typeHtml}</div>
+          ${bar(mon.hp,             255, statColor(mon.hp))}
+          ${bar(mon.attack,         255, statColor(mon.attack))}
+          ${bar(mon.defense,        255, statColor(mon.defense))}
+          ${bar(mon.specialAttack,  255, statColor(mon.specialAttack))}
+          ${bar(mon.specialDefense, 255, statColor(mon.specialDefense))}
+          ${bar(mon.speed,          255, statColor(mon.speed))}
+          <div class="bst-row">BST ${mon.bst}</div>
+          ${note ? `<div class="note">${note}</div>` : ""}
+        </div>
+      `;
+    }).join("")}
+  </div>
+
+  <!-- Bottom: Speed tiers, Role balance, Type coverage -->
+  <div class="bottom-grid">
+
+    <!-- Speed tiers -->
+    <div class="section">
+      <div class="section-title">⚡ Speed Tiers</div>
+      ${bySpeed.map((s, i) => `
+        <div class="speed-row">
+          <span class="speed-rank">${i + 1}</span>
+          <img src="${s.pokemon.spriteUrl}" width="16" height="16" style="object-fit:contain;" />
+          <span class="speed-name">${s.pokemon.name}</span>
+          <div class="speed-bar-wrap"><div class="speed-bar" style="width:${Math.round(s.pokemon.speed / maxSpeed * 100)}%"></div></div>
+          <span class="speed-val">${s.pokemon.speed}</span>
+        </div>
+      `).join("")}
+    </div>
+
+    <!-- Role balance -->
+    <div class="section">
+      <div class="section-title">⚔️ Role Balance</div>
+      ${[
+        { role: "Physical",  color: "#f87171", count: roleCount.Physical  },
+        { role: "Special",   color: "#60a5fa", count: roleCount.Special   },
+        { role: "Defensive", color: "#4ade80", count: roleCount.Defensive },
+      ].map(({ role, color, count }) => `
+        <div class="role-row">
+          <span class="role-name">${role}</span>
+          <div class="role-bar-wrap">
+            <div style="width:${Math.round(count / slots.length * 100)}%;height:100%;background:${color};border-radius:4px;"></div>
+          </div>
+          <span class="role-count">${count}</span>
+        </div>
+      `).join("")}
+
+      <div style="margin-top:16px;">
+        <div class="section-title" style="margin-bottom:6px;">📝 Notes</div>
+        ${slots.filter(s => s.note).map(({ pokemon: mon, note }) =>
+          `<div style="font-size:10px;margin-bottom:4px;color:#94a3b8;"><span style="color:#e2e8f0;font-weight:700;">${mon.name}:</span> ${note}</div>`
+        ).join("") || `<div style="font-size:10px;color:#475569;font-style:italic;">No notes added.</div>`}
+      </div>
+    </div>
+
+    <!-- Type coverage -->
+    <div class="section">
+      <div class="section-title">🗺️ Type Coverage</div>
+      <div class="type-grid">
+        ${allTypes.map(type => {
+          const color = typeColorMap[type];
           return `
-            <div class="card">
-              <img src="${mon.spriteUrl}" alt="${mon.name}" />
-              <div class="name">${mon.name}</div>
-              <div class="pts">${mon.pointValue}pts</div>
-              <div class="types">${typeHtml}</div>
-              <div class="stats">HP ${mon.hp} | Atk ${mon.attack} | Def ${mon.defense}<br/>SpA ${mon.specialAttack} | SpD ${mon.specialDefense} | Spe ${mon.speed} | BST ${mon.bst}</div>
-              ${note ? `<div class="note">${note}</div>` : ""}
+            <div class="type-cell" style="background:${color}22;border:1px solid ${color}44;">
+              <div class="tn" style="color:${color}">${type.slice(0,3).toUpperCase()}</div>
             </div>
           `;
         }).join("")}
       </div>
-      <div class="summary">
-        <div><b>${used}</b><br/>pts used</div>
-        <div><b>${budget - used}</b><br/>pts left</div>
-        <div><b>${Math.round(slots.reduce((s, b) => s + b.pokemon.bst, 0) / Math.max(1, slots.length))}</b><br/>avg BST</div>
-      </div>
-    </body>
-    </html>
-  `;
+      <div style="font-size:10px;color:#475569;margin-top:8px;">Your team's type spread</div>
+    </div>
+
+  </div>
+
+</body>
+</html>`;
 
   const win = window.open("", "_blank");
   if (!win) return;
   win.document.write(html);
   win.document.close();
   win.focus();
-  setTimeout(() => { win.print(); }, 500);
+  setTimeout(() => { win.print(); }, 600);
 }
 
 // ─── Team Builder sidebar ─────────────────────────────────────────────────────
@@ -363,7 +525,7 @@ function TeamBuilder({
                 className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                 <Share2 size={15} />
               </button>
-              <button onClick={() => exportToPdf(slots, budget)} title="Export as PDF"
+              <button onClick={() => exportToPdf(slots, budget, seasonName)} title="Export as PDF"
                 className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                 <Download size={15} />
               </button>
@@ -472,7 +634,7 @@ function TeamBuilder({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function DraftWorkspace({ pokemon, budget }: { pokemon: Pokemon[]; budget: number }) {
+export function DraftWorkspace({ pokemon, budget, seasonName }: { pokemon: Pokemon[]; budget: number; seasonName?: string }) {
   const legal = useMemo(
     () => pokemon.filter((m) => !m.legendary && !m.mythical && !m.paradox),
     [pokemon]
