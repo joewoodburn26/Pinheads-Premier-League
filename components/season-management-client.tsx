@@ -94,7 +94,7 @@ function RosterSizeEditor({ season }: { season: Season }) {
         <div className="space-y-2">
           {size < (season.rosterSize ?? 10) && !confirm && (
             <p className="text-xs text-yellow-400">
-              ⚠️ Reducing from {season.rosterSize} to {size} will permanently remove Pokémon in slots {size + 1}–{season.rosterSize} for every team.
+              ⚠️ Reducing from {season.rosterSize} to {size} will permanently remove Pokémon in slots {size + 1} to {season.rosterSize} for every team.
             </p>
           )}
           <div className="flex gap-2">
