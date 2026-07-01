@@ -303,8 +303,12 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
               <button onClick={() => setRosterSize(c => Math.min(20, c + 1))}
                 className="rounded-md border bg-muted px-2 py-2 hover:bg-muted/80"><Plus size={14} /></button>
             </div>
-            <p className="text-xs text-muted-foreground">Each team can draft up to {rosterSize} Pokémon</p>
+            <p className="text-xs text-muted-foreground">Each team can draft up to {rosterSize} Pokemon</p>
           </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Number of Teams <span className="text-muted-foreground/60">(4-12)</span>
+            </label>
             <div className="flex items-center gap-2">
               <button onClick={() => setTeamCount(c => Math.max(4, c - 1))}
                 className="rounded-md border bg-muted px-2 py-2 hover:bg-muted/80"><Minus size={14} /></button>
@@ -315,7 +319,7 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
                 className="rounded-md border bg-muted px-2 py-2 hover:bg-muted/80"><Plus size={14} /></button>
             </div>
             <p className="text-xs text-muted-foreground">
-              {teamCount % 2 !== 0 ? "⚠️ Odd count — one team gets a bye each week" : ""}
+              {teamCount % 2 !== 0 ? "Odd count - one team gets a bye each week" : ""}
               {` ${Math.min(teamCount - 1, 8)} week schedule will be generated`}
             </p>
           </div>
