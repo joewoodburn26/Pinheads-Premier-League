@@ -2,7 +2,7 @@ export type Season = {
   id: string;
   name: string;
   draftBudget: number;
-  rosterSize: number;
+  rosterSize?: number;
   activeSeason: boolean;
   archived: boolean;
   createdAt: string;
