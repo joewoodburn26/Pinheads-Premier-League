@@ -7,6 +7,7 @@ export async function getSeasons() {
   const { data } = await supabase.from("seasons").select("*").order("created_at", { ascending: false });
   return (data ?? []).map((row) => ({
     id: row.id, name: row.name, draftBudget: row.draft_budget,
+    rosterSize: row.roster_size ?? 10,
     activeSeason: row.active_season, archived: row.archived, createdAt: row.created_at
   }));
 }
@@ -41,7 +42,7 @@ export async function getTeam(id: string) {
 export async function getAllPokemon() {
   if (!hasSupabaseEnv()) return pokemon;
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.from("pokemon").select("*").order("dex_number", { ascending: true }).limit(2000);
+  const { data } = await supabase.from("pokemon").select("*").order("dex_number", { ascending: true }).range(0, 1999);
   return (data ?? []).map((row) => ({
     id: row.id, dexNumber: row.dex_number, name: row.name, spriteUrl: row.sprite_url,
     primaryType: row.primary_type, secondaryType: row.secondary_type,
@@ -56,7 +57,7 @@ export async function getAllPokemon() {
 export async function getPokemon() {
   if (!hasSupabaseEnv()) return pokemon;
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.from("pokemon").select("*").eq("banned", false).order("point_value", { ascending: false }).limit(2000);
+  const { data } = await supabase.from("pokemon").select("*").eq("banned", false).order("point_value", { ascending: false }).range(0, 1999);
   return (data ?? []).map((row) => ({
     id: row.id, dexNumber: row.dex_number, name: row.name, spriteUrl: row.sprite_url,
     primaryType: row.primary_type, secondaryType: row.secondary_type,

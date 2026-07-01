@@ -15,6 +15,7 @@ export async function createNewSeason(formData: FormData) {
   const name        = z.string().min(1).parse(formData.get("name"));
   const budget      = z.coerce.number().int().positive().default(105).parse(formData.get("budget"));
   const teamCount   = z.coerce.number().int().min(4).max(12).default(8).parse(formData.get("teamCount"));
+  const rosterSize  = z.coerce.number().int().min(1).max(20).default(10).parse(formData.get("rosterSize"));
   const sourceId    = formData.get("sourceSeasonId") as string | null;
   const copyNames   = formData.get("copyNames")   === "true";
   const copyCoaches = formData.get("copyCoaches") === "true";
@@ -24,13 +25,13 @@ export async function createNewSeason(formData: FormData) {
   // Create season
   const { data: season, error: seasonErr } = await supabase
     .from("seasons")
-    .insert({ name, draft_budget: budget, active_season: false, archived: false })
+    .insert({ name, draft_budget: budget, roster_size: rosterSize, active_season: false, archived: false })
     .select("*")
     .single();
   if (seasonErr || !season) return { ok: false, error: seasonErr?.message };
 
   // Get source teams if copying
-  let sourceTeams: { id: string; coach_id: string; team_name: string; logo_url: string | null; coach?: { name: string } | null }[] = [];
+  let sourceTeams: any[] = [];
   if (sourceId && (copyNames || copyCoaches || copyLogos || copyRosters)) {
     const { data } = await supabase.from("teams").select("*, coach:coaches(*)").eq("season_id", sourceId);
     sourceTeams = data ?? [];
@@ -284,4 +285,39 @@ export async function updatePointsFromCsv(formData: FormData) {
   revalidatePath("/draft");
   revalidatePath("/rosters");
   return { ok: true, updated };
+}
+
+// ─── Update roster size for a season ─────────────────────────────────────────
+
+export async function updateRosterSize(seasonId: string, rosterSize: number): Promise<{ ok: boolean }> {
+  if (!hasSupabaseEnv()) return { ok: false };
+  const supabase = createSupabaseAdminClient();
+
+  await supabase
+    .from("seasons")
+    .update({ roster_size: rosterSize })
+    .eq("id", seasonId);
+
+  // Remove pokemon over the new limit for each team in this season
+  const { data: teams } = await supabase
+    .from("teams")
+    .select("id")
+    .eq("season_id", seasonId);
+
+  for (const team of teams ?? []) {
+    const { data: slots } = await supabase
+      .from("team_pokemon")
+      .select("id")
+      .eq("team_id", team.id)
+      .order("slot_order", { ascending: true });
+
+    const over = (slots ?? []).slice(rosterSize);
+    for (const slot of over) {
+      await supabase.from("team_pokemon").delete().eq("id", slot.id);
+    }
+  }
+
+  revalidatePath("/rosters");
+  revalidatePath("/settings/seasons");
+  return { ok: true };
 }

@@ -165,12 +165,13 @@ function EmptySlotCell({
 // ── Team roster editor ────────────────────────────────────────────────────────
 
 export function TeamRosterEditor({
-  teamId, seasonId, slots, allPokemon,
+  teamId, seasonId, slots, allPokemon, rosterSize = 10,
 }: {
   teamId: string;
   seasonId: string;
   slots: (TeamPokemon & { pokemon?: Pokemon })[];
   allPokemon: Pokemon[];
+  rosterSize?: number;
 }) {
   // Sync local slots with incoming prop whenever server data refreshes
   const [localSlots, setLocalSlots] = useState(slots);
@@ -183,7 +184,7 @@ export function TeamRosterEditor({
     setLocalSlots(slots);
   }, [slots]);
 
-  const padded = Array.from({ length: 10 }, (_, i) => localSlots[i] ?? null);
+  const padded = Array.from({ length: rosterSize }, (_, i) => localSlots[i] ?? null);
   const totalPoints = localSlots.reduce((sum, s) => sum + (s.pokemon?.pointValue ?? 0), 0);
 
   function handleDragStart(index: number) {

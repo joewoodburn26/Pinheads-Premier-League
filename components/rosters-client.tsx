@@ -11,15 +11,15 @@ interface RosterData {
 }
 
 export function RostersClient({
-  initialRosters, seasonId, allPokemon,
+  initialRosters, seasonId, allPokemon, rosterSize = 10,
 }: {
   initialRosters: RosterData[];
   seasonId: string;
   allPokemon: Pokemon[];
+  rosterSize?: number;
 }) {
   const [rosters, setRosters] = useState(initialRosters);
 
-  // Sync with server data when it changes (after add/remove/revalidate or filter change)
   useEffect(() => {
     setRosters(initialRosters);
   }, [initialRosters]);
@@ -44,6 +44,7 @@ export function RostersClient({
             seasonId={seasonId}
             slots={slots}
             allPokemon={allPokemon}
+            rosterSize={rosterSize}
           />
         </section>
       ))}

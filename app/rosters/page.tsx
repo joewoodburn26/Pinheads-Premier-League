@@ -38,13 +38,18 @@ export default async function RostersPage({
         <div>
           <h1 className="text-4xl font-black">Rosters</h1>
           <p className="mt-1 text-muted-foreground">
-            {season.name} · click ↔ to replace or ✕ to remove a Pokémon · drag cards to reorder
+            {season.name} · {season.rosterSize ?? 10} Pokémon per team · click ↔ to replace or ✕ to remove · drag to reorder
           </p>
         </div>
         <RosterTeamFilter allTeams={allTeams} selectedIds={selectedIds} />
       </div>
 
-      <RostersClient initialRosters={rosters} seasonId={season.id} allPokemon={allPokemon} />
+      <RostersClient
+        initialRosters={rosters}
+        seasonId={season.id}
+        allPokemon={allPokemon}
+        rosterSize={season.rosterSize ?? 10}
+      />
     </div>
   );
 }

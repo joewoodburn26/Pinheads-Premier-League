@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import {
   createNewSeason, setActiveSeason, archiveSeason,
   deleteSeason, applyTeamChanges, regenerateSchedule,
+  updateRosterSize,
 } from "@/lib/settings-actions";
 import type { Season, Team } from "@/lib/types";
 
@@ -57,7 +58,64 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Roster size editor ────────────────────────────────────────────────────────
+
+function RosterSizeEditor({ season }: { season: Season }) {
+  const [isPending, startTransition] = useTransition();
+  const [size,    setSize]    = useState(season.rosterSize ?? 10);
+  const [confirm, setConfirm] = useState(false);
+  const [saved,   setSaved]   = useState(false);
+
+  function handleSave() {
+    startTransition(async () => {
+      await updateRosterSize(season.id, size);
+      setSaved(true);
+      setConfirm(false);
+      setTimeout(() => setSaved(false), 2000);
+    });
+  }
+
+  return (
+    <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold">Roster Size</p>
+          <p className="text-xs text-muted-foreground">Max Pokémon per team. Reducing will remove Pokémon over the limit.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => { setSize(s => Math.max(1, s - 1)); setConfirm(false); }}
+            className="rounded-md border bg-muted px-2 py-1.5 hover:bg-muted/80"><Minus size={14} /></button>
+          <span className="text-xl font-black w-8 text-center">{size}</span>
+          <button onClick={() => { setSize(s => Math.min(20, s + 1)); setConfirm(false); }}
+            className="rounded-md border bg-muted px-2 py-1.5 hover:bg-muted/80"><Plus size={14} /></button>
+        </div>
+      </div>
+      {size !== (season.rosterSize ?? 10) && (
+        <div className="space-y-2">
+          {size < (season.rosterSize ?? 10) && !confirm && (
+            <p className="text-xs text-yellow-400">
+              ⚠️ Reducing from {season.rosterSize} to {size} will permanently remove Pokémon in slots {size + 1}–{season.rosterSize} for every team.
+            </p>
+          )}
+          <div className="flex gap-2">
+            {size < (season.rosterSize ?? 10) && !confirm ? (
+              <Button onClick={() => setConfirm(true)} variant="secondary">I understand — show confirm</Button>
+            ) : (
+              <Button onClick={handleSave} disabled={isPending}
+                className={size < (season.rosterSize ?? 10) ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}>
+                {isPending ? "Saving…" : `Save Roster Size (${size})`}
+              </Button>
+            )}
+            <Button variant="secondary" onClick={() => { setSize(season.rosterSize ?? 10); setConfirm(false); }}>Reset</Button>
+          </div>
+          {saved && <p className="text-xs text-green-400">✓ Roster size updated</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────────
 
 export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; teams: Team[] }) {
   const [isPending, startTransition] = useTransition();
@@ -68,6 +126,7 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
   const [name,        setName]       = useState("");
   const [budget,      setBudget]     = useState(105);
   const [teamCount,   setTeamCount]  = useState(8);
+  const [rosterSize,  setRosterSize] = useState(10);
   const [sourceId,    setSourceId]   = useState("");
   const [copyNames,   setCopyNames]  = useState(true);
   const [copyCoaches, setCopyCoaches]= useState(false);
@@ -97,6 +156,7 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
     fd.set("name",           name.trim());
     fd.set("budget",         String(budget));
     fd.set("teamCount",      String(teamCount));
+    fd.set("rosterSize",     String(rosterSize));
     fd.set("sourceSeasonId", sourceId);
     fd.set("copyNames",      String(copyNames));
     fd.set("copyCoaches",    String(copyCoaches));
@@ -232,8 +292,19 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
           </div>
           <div className="space-y-1">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Number of Teams <span className="text-muted-foreground/60">(4–12)</span>
+              Roster Size <span className="text-muted-foreground/60">(per team)</span>
             </label>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setRosterSize(c => Math.max(1, c - 1))}
+                className="rounded-md border bg-muted px-2 py-2 hover:bg-muted/80"><Minus size={14} /></button>
+              <Input type="number" min={1} max={20} value={rosterSize}
+                onChange={e => setRosterSize(Math.min(20, Math.max(1, Number(e.target.value))))}
+                className="text-center font-bold text-lg" />
+              <button onClick={() => setRosterSize(c => Math.min(20, c + 1))}
+                className="rounded-md border bg-muted px-2 py-2 hover:bg-muted/80"><Plus size={14} /></button>
+            </div>
+            <p className="text-xs text-muted-foreground">Each team can draft up to {rosterSize} Pokémon</p>
+          </div>
             <div className="flex items-center gap-2">
               <button onClick={() => setTeamCount(c => Math.max(4, c - 1))}
                 className="rounded-md border bg-muted px-2 py-2 hover:bg-muted/80"><Minus size={14} /></button>
@@ -294,6 +365,9 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
               <RefreshCw size={13} /> Re-randomize Schedule
             </button>
           </div>
+
+          {/* Roster size editor */}
+          <RosterSizeEditor season={activeSeason} />
 
           {/* Add team */}
           <div className="flex gap-3">
