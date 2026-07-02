@@ -4,7 +4,8 @@ import { DraftWorkspace } from "@/components/draft-workspace";
 export const revalidate = 0;
 
 export default async function DraftPage() {
-  const [season, pokemon] = await Promise.all([getActiveSeason(), getPokemon()]);
+  const season = await getActiveSeason();
+  const pokemon = await getPokemon(season?.id);
 
   return (
     <div className="space-y-6">

@@ -21,6 +21,8 @@ export async function createNewSeason(formData: FormData) {
   const copyCoaches = formData.get("copyCoaches") === "true";
   const copyRosters = formData.get("copyRosters") === "true";
   const copyLogos   = formData.get("copyLogos")   === "true";
+  const copyPoints  = formData.get("copyPoints")  === "true";
+  const pointsSourceId = formData.get("pointsSourceId") as string | null;
 
   // Create season
   const { data: season, error: seasonErr } = await supabase
@@ -31,7 +33,7 @@ export async function createNewSeason(formData: FormData) {
   if (seasonErr || !season) return { ok: false, error: seasonErr?.message };
 
   // Get source teams if copying
-  let sourceTeams: { id: string; coach_id: string; team_name: string; logo_url: string | null; coach?: { name: string } | null }[] = [];
+  let sourceTeams: any[] = [];
   if (sourceId && (copyNames || copyCoaches || copyLogos || copyRosters)) {
     const { data } = await supabase.from("teams").select("*, coach:coaches(*)").eq("season_id", sourceId);
     sourceTeams = data ?? [];
@@ -90,6 +92,43 @@ export async function createNewSeason(formData: FormData) {
       home_diff:  0,
       away_diff:  0,
     });
+  }
+
+  // Seed season_point_values from source season or global defaults
+  const effectivePointSource = pointsSourceId || sourceId;
+  if (copyPoints && effectivePointSource) {
+    // Copy from another season's overrides
+    const { data: sourcePoints } = await supabase
+      .from("season_point_values")
+      .select("pokemon_id, point_value")
+      .eq("season_id", effectivePointSource);
+
+    if (sourcePoints && sourcePoints.length > 0) {
+      const inserts = sourcePoints.map(row => ({
+        season_id: season.id,
+        pokemon_id: row.pokemon_id,
+        point_value: row.point_value,
+      }));
+      await supabase.from("season_point_values").insert(inserts);
+    } else {
+      // Source season has no overrides — copy from global pokemon.point_value
+      const { data: globalPokemon } = await supabase.from("pokemon").select("id, point_value");
+      const inserts = (globalPokemon ?? []).map(row => ({
+        season_id: season.id,
+        pokemon_id: row.id,
+        point_value: row.point_value,
+      }));
+      if (inserts.length > 0) await supabase.from("season_point_values").insert(inserts);
+    }
+  } else {
+    // No copy source — seed from global pokemon.point_value as baseline
+    const { data: globalPokemon } = await supabase.from("pokemon").select("id, point_value");
+    const inserts = (globalPokemon ?? []).map(row => ({
+      season_id: season.id,
+      pokemon_id: row.id,
+      point_value: row.point_value,
+    }));
+    if (inserts.length > 0) await supabase.from("season_point_values").insert(inserts);
   }
 
   revalidatePath("/");
@@ -254,14 +293,20 @@ export async function deleteTeam(formData: FormData) {
 
 // ─── Point restructure ────────────────────────────────────────────────────────
 
-export async function updatePokemonPoints(updates: { id: string; pointValue: number }[]) {
+export async function updatePokemonPoints(updates: { id: string; pointValue: number }[], seasonId?: string) {
   if (!hasSupabaseEnv()) return { ok: false };
   const supabase = createSupabaseAdminClient();
   for (const { id, pointValue } of updates) {
-    await supabase.from("pokemon").update({ point_value: pointValue }).eq("id", id);
+    if (seasonId) {
+      await supabase.from("season_point_values").upsert({
+        season_id: seasonId, pokemon_id: id, point_value: pointValue,
+      }, { onConflict: "season_id,pokemon_id" });
+    } else {
+      await supabase.from("pokemon").update({ point_value: pointValue }).eq("id", id);
+    }
   }
   revalidatePath("/draft");
-  revalidatePath("/rosters");
+  revalidatePath("/settings/point-restructure");
   return { ok: true };
 }
 
@@ -269,21 +314,35 @@ export async function updatePointsFromCsv(formData: FormData) {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase not configured" };
   const file = formData.get("file");
   if (!(file instanceof File)) return { ok: false, error: "No file" };
+  const seasonId = formData.get("seasonId") as string | null;
   const text  = await file.text();
   const lines = text.split("\n").slice(1);
   const supabase = createSupabaseAdminClient();
   let updated = 0;
   for (const line of lines) {
     const cols = line.split(",");
-    if (cols.length < 4) continue;
+    if (cols.length < 2) continue;
     const dexNumber  = parseInt(cols[0]?.trim());
-    const pointValue = parseInt(cols[3]?.trim());
+    // Points column is last (index 12 in new format, index 3 in old format)
+    const pointValue = parseInt(cols[cols.length - 1]?.trim());
     if (isNaN(dexNumber) || isNaN(pointValue)) continue;
-    const { error } = await supabase.from("pokemon").update({ point_value: pointValue }).eq("dex_number", dexNumber);
-    if (!error) updated++;
+
+    // Find the pokemon by dex number
+    const { data: mon } = await supabase
+      .from("pokemon").select("id").eq("dex_number", dexNumber).maybeSingle();
+    if (!mon) continue;
+
+    if (seasonId) {
+      await supabase.from("season_point_values").upsert({
+        season_id: seasonId, pokemon_id: mon.id, point_value: pointValue,
+      }, { onConflict: "season_id,pokemon_id" });
+    } else {
+      await supabase.from("pokemon").update({ point_value: pointValue }).eq("id", mon.id);
+    }
+    updated++;
   }
   revalidatePath("/draft");
-  revalidatePath("/rosters");
+  revalidatePath("/settings/point-restructure");
   return { ok: true, updated };
 }
 

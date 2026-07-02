@@ -68,10 +68,25 @@ export async function duplicateSeason(formData: FormData) {
   revalidatePath("/seasons");
 }
 
-export async function updatePokemonCost(pokemonId: string, pointValue: number) {
+export async function updatePokemonCost(pokemonId: string, pointValue: number, seasonId?: string) {
   if (!hasSupabaseEnv()) return;
-  await createSupabaseAdminClient().from("pokemon").update({ point_value: pointValue }).eq("id", pokemonId);
+  const supabase = createSupabaseAdminClient();
+
+  if (seasonId) {
+    // Write season-specific override
+    await supabase.from("season_point_values").upsert({
+      season_id: seasonId,
+      pokemon_id: pokemonId,
+      point_value: pointValue,
+    }, { onConflict: "season_id,pokemon_id" });
+  } else {
+    // Fall back to global update
+    await supabase.from("pokemon").update({ point_value: pointValue }).eq("id", pokemonId);
+  }
+
   revalidatePath("/draft");
+  revalidatePath("/rosters");
+  revalidatePath("/settings/point-restructure");
 }
 
 export async function updateTeamName(teamId: string, formData: FormData) {

@@ -132,6 +132,8 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
   const [copyCoaches, setCopyCoaches]= useState(false);
   const [copyRosters, setCopyRosters]= useState(false);
   const [copyLogos,   setCopyLogos]  = useState(false);
+  const [copyPoints,  setCopyPoints] = useState(true);
+  const [pointsSourceId, setPointsSourceId] = useState("");
 
   // Team management pending changes
   const [teamsToAdd,    setTeamsToAdd]    = useState<string[]>([]);
@@ -162,6 +164,8 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
     fd.set("copyCoaches",    String(copyCoaches));
     fd.set("copyRosters",    String(copyRosters));
     fd.set("copyLogos",      String(copyLogos));
+    fd.set("copyPoints",     String(copyPoints));
+    fd.set("pointsSourceId", pointsSourceId);
     startTransition(async () => {
       const result = await createNewSeason(fd);
       if (result.ok) { setName(""); flash(`✓ Season created with ${teamCount} teams and auto-generated schedule`); }
@@ -343,6 +347,32 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
               <Toggle label="Logos/Images" checked={copyLogos}   onChange={setCopyLogos}   />
             </div>
           )}
+
+          {/* Points source — always shown, independent of copy-from */}
+          <div className="space-y-2 border-t pt-3 mt-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold">Point System</p>
+                <p className="text-xs text-muted-foreground">Copy point values from a previous season or use current global values</p>
+              </div>
+              <Toggle label="Copy Points" checked={copyPoints} onChange={setCopyPoints} />
+            </div>
+            {copyPoints && (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Copy Points From</label>
+                <select value={pointsSourceId} onChange={e => setPointsSourceId(e.target.value)}
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm">
+                  <option value="">— Use current global values —</option>
+                  {seasons.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  {pointsSourceId
+                    ? `Will copy all point values from ${seasons.find(s => s.id === pointsSourceId)?.name}`
+                    : "Will seed from current global Pokémon point values"}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-3">

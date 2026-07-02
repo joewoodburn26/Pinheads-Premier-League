@@ -7,7 +7,6 @@ export async function getSeasons() {
   const { data } = await supabase.from("seasons").select("*").order("created_at", { ascending: false });
   return (data ?? []).map((row) => ({
     id: row.id, name: row.name, draftBudget: row.draft_budget,
-    rosterSize: row.roster_size ?? 10,
     activeSeason: row.active_season, archived: row.archived, createdAt: row.created_at
   }));
 }
@@ -39,31 +38,62 @@ export async function getTeam(id: string) {
   return all.find((team) => team.id === id) ?? teams.find((team) => team.id === id);
 }
 
-export async function getAllPokemon() {
+export async function getAllPokemon(seasonId?: string) {
   if (!hasSupabaseEnv()) return pokemon;
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.from("pokemon").select("*").order("dex_number", { ascending: true }).range(0, 1999);
-  return (data ?? []).map((row) => ({
+
+  const rows = data ?? [];
+
+  let pointOverrides: Record<string, number> = {};
+  if (seasonId) {
+    const { data: spv } = await supabase
+      .from("season_point_values")
+      .select("pokemon_id, point_value")
+      .eq("season_id", seasonId);
+    for (const row of spv ?? []) {
+      pointOverrides[row.pokemon_id] = row.point_value;
+    }
+  }
+
+  return rows.map((row) => ({
     id: row.id, dexNumber: row.dex_number, name: row.name, spriteUrl: row.sprite_url,
     primaryType: row.primary_type, secondaryType: row.secondary_type,
     hp: row.hp, attack: row.attack, defense: row.defense,
     specialAttack: row.special_attack, specialDefense: row.special_defense,
-    speed: row.speed, bst: row.bst, pointValue: row.point_value,
+    speed: row.speed, bst: row.bst,
+    pointValue: pointOverrides[row.id] ?? row.point_value,
     legendary: row.legendary, mythical: row.mythical, paradox: row.paradox,
     banned: row.banned ?? false,
   }));
 }
 
-export async function getPokemon() {
+export async function getPokemon(seasonId?: string) {
   if (!hasSupabaseEnv()) return pokemon;
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.from("pokemon").select("*").eq("banned", false).order("point_value", { ascending: false }).range(0, 1999);
-  return (data ?? []).map((row) => ({
+
+  const rows = data ?? [];
+
+  // If seasonId provided, fetch season-specific point overrides
+  let pointOverrides: Record<string, number> = {};
+  if (seasonId) {
+    const { data: spv } = await supabase
+      .from("season_point_values")
+      .select("pokemon_id, point_value")
+      .eq("season_id", seasonId);
+    for (const row of spv ?? []) {
+      pointOverrides[row.pokemon_id] = row.point_value;
+    }
+  }
+
+  return rows.map((row) => ({
     id: row.id, dexNumber: row.dex_number, name: row.name, spriteUrl: row.sprite_url,
     primaryType: row.primary_type, secondaryType: row.secondary_type,
     hp: row.hp, attack: row.attack, defense: row.defense,
     specialAttack: row.special_attack, specialDefense: row.special_defense,
-    speed: row.speed, bst: row.bst, pointValue: row.point_value,
+    speed: row.speed, bst: row.bst,
+    pointValue: pointOverrides[row.id] ?? row.point_value,
     legendary: row.legendary, mythical: row.mythical, paradox: row.paradox,
     banned: row.banned ?? false,
   }));
