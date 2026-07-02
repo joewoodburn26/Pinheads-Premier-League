@@ -14,7 +14,7 @@ import type { Pokemon, Season } from "@/lib/types";
 
 // ── CSV generation with sprites and stats ─────────────────────────────────────
 
-function generateCsv(pokemon: Pokemon[], seasonName: string): string {
+function generateCsv(pokemon: Pokemon[]): string {
   const header = [
     "Pokedex #", "Name", "Sprite URL",
     "Primary Type", "Secondary Type",
@@ -84,7 +84,7 @@ export function PointRestructureClient({
   }
 
   function handleDownload() {
-    const csv = generateCsv(pokemon, currentSeason?.name ?? "Season");
+    const csv = generateCsv(pokemon);
     const blob = new Blob([csv], { type: "text/csv" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");

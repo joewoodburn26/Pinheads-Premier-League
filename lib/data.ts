@@ -45,7 +45,7 @@ export async function getAllPokemon(seasonId?: string) {
 
   const rows = data ?? [];
 
-  let pointOverrides: Record<string, number> = {};
+  const pointOverrides: Record<string, number> = {};
   if (seasonId) {
     const { data: spv } = await supabase
       .from("season_point_values")
@@ -76,7 +76,7 @@ export async function getPokemon(seasonId?: string) {
   const rows = data ?? [];
 
   // If seasonId provided, fetch season-specific point overrides
-  let pointOverrides: Record<string, number> = {};
+  const pointOverrides: Record<string, number> = {};
   if (seasonId) {
     const { data: spv } = await supabase
       .from("season_point_values")
