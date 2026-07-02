@@ -7,6 +7,7 @@ export async function getSeasons() {
   const { data } = await supabase.from("seasons").select("*").order("created_at", { ascending: false });
   return (data ?? []).map((row) => ({
     id: row.id, name: row.name, draftBudget: row.draft_budget,
+    rosterSize: row.roster_size ?? 10,
     activeSeason: row.active_season, archived: row.archived, createdAt: row.created_at
   }));
 }
