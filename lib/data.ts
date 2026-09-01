@@ -100,13 +100,26 @@ export async function getPokemon(seasonId?: string) {
   }));
 }
 
-export async function getRoster(teamId: string) {
+export async function getRoster(teamId: string, seasonId?: string) {
   if (!hasSupabaseEnv()) return teamPokemon.filter((slot) => slot.teamId === teamId);
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
     .from("team_pokemon").select("*, pokemon(*)")
     .eq("team_id", teamId)
     .order("slot_order", { ascending: true });
+
+  // Fetch season-specific point overrides
+  const pointOverrides: Record<string, number> = {};
+  if (seasonId) {
+    const { data: spv } = await supabase
+      .from("season_point_values")
+      .select("pokemon_id, point_value")
+      .eq("season_id", seasonId);
+    for (const row of spv ?? []) {
+      pointOverrides[row.pokemon_id] = row.point_value;
+    }
+  }
+
   return (data ?? []).map((row) => ({
     id: row.id, seasonId: row.season_id, teamId: row.team_id, pokemonId: row.pokemon_id,
     pokemon: row.pokemon ? {
@@ -115,7 +128,8 @@ export async function getRoster(teamId: string) {
       secondaryType: row.pokemon.secondary_type, hp: row.pokemon.hp,
       attack: row.pokemon.attack, defense: row.pokemon.defense,
       specialAttack: row.pokemon.special_attack, specialDefense: row.pokemon.special_defense,
-      speed: row.pokemon.speed, bst: row.pokemon.bst, pointValue: row.pokemon.point_value,
+      speed: row.pokemon.speed, bst: row.pokemon.bst,
+      pointValue: pointOverrides[row.pokemon.id] ?? row.pokemon.point_value,
       legendary: row.pokemon.legendary, mythical: row.pokemon.mythical, paradox: row.pokemon.paradox
     } : undefined
   }));

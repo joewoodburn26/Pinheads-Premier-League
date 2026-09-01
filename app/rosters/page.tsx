@@ -12,7 +12,7 @@ export default async function RostersPage({
   const season = await getActiveSeason();
   const [allTeams, allPokemon] = await Promise.all([
     getTeams(season.id),
-    getPokemon(),
+    getPokemon(season.id),
   ]);
 
   const { teams: teamsParam } = await searchParams;
@@ -24,7 +24,7 @@ export default async function RostersPage({
       : allTeams;
 
   const rostersRaw = await Promise.all(
-    visibleTeams.map((team) => getRoster(team.id))
+    visibleTeams.map((team) => getRoster(team.id, season.id))
   );
 
   const rosters = visibleTeams.map((team, i) => ({

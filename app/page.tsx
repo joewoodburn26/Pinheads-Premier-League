@@ -17,7 +17,7 @@ export default async function HomePage() {
   ]);
 
   // Get top Pokémon per team (highest point value)
-  const rostersRaw = await Promise.all(teams.map((t) => getRoster(t.id)));
+  const rostersRaw = await Promise.all(teams.map((t) => getRoster(t.id, season?.id)));
   const topPokemonMap: Record<string, Pokemon> = {};
   teams.forEach((team, i) => {
     const slots = rostersRaw[i];
