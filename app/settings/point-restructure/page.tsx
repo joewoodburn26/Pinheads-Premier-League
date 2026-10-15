@@ -5,7 +5,7 @@ export const revalidate = 0;
 
 export default async function PointRestructurePage() {
   const [season, seasons] = await Promise.all([getActiveSeason(), getSeasons()]);
-  const pokemon = await getPokemon(season.id);
+  const pokemon = await getPokemon();
 
   return (
     <div className="space-y-6">
