@@ -172,7 +172,11 @@ export function RandomizerClient({ allPokemon }: { allPokemon: Pokemon[] }) {
     setSelectedTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
 
   const toggleLock = (id: string) =>
-    setLockedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setLockedIds(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) { n.delete(id); } else { n.add(id); }
+      return n;
+    });
 
   // Send locked Pokémon to Draft page via sessionStorage
   const sendToDraft = () => {
