@@ -51,14 +51,17 @@ function cachedFetch<T>(key: string, fn: () => Promise<T>): Promise<T> {
   return fetchCache.get(key) as Promise<T>;
 }
 
-const CORS = "https://corsproxy.io/?url=";
+/** Fetch a Showdown data file via the server-side proxy (avoids CORS). */
+async function fetchShowdown(url: string): Promise<string> {
+  const res = await fetch(`/api/showdown?url=${encodeURIComponent(url)}`);
+  if (!res.ok) throw new Error(`Failed to fetch Showdown data (${res.status})`);
+  return res.text();
+}
 
 /** Returns Set of lowercase Pokémon names that are legal in the format (not Illegal / nonstandard). */
 async function fetchLegalSet(url: string): Promise<Set<string>> {
   return cachedFetch(`legal:${url}`, async () => {
-    const res = await fetch(`${CORS}${encodeURIComponent(url)}`);
-    if (!res.ok) throw new Error(`Failed to fetch format data (${res.status})`);
-    const text = await res.text();
+    const text = await fetchShowdown(url);
     const legal = new Set<string>();
     const re = /^\s{0,4}(\w+)\s*:\s*\{([^}]*)\}/gm;
     let m: RegExpExecArray | null;
@@ -82,9 +85,7 @@ type EvoInfo = { hasPrev: boolean; hasEvos: boolean };
 async function fetchEvoMap(): Promise<Map<string, EvoInfo>> {
   return cachedFetch("evomap", async () => {
     const url = "https://raw.githubusercontent.com/smogon/pokemon-showdown/master/data/pokedex.ts";
-    const res = await fetch(`${CORS}${encodeURIComponent(url)}`);
-    if (!res.ok) throw new Error(`Failed to fetch Pokédex data (${res.status})`);
-    const text = await res.text();
+    const text = await fetchShowdown(url);
     const map = new Map<string, EvoInfo>();
     // Match blocks like: bulbasaur: { ... prevo:"..." ... evos:[...] ... }
     const entryRe = /^\s{0,4}(\w+)\s*:\s*\{([\s\S]*?)\},?\s*$/gm;
