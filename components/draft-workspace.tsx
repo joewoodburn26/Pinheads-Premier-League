@@ -671,6 +671,29 @@ export function DraftWorkspace({ pokemon, budget, seasonName }: { pokemon: Pokem
     }
   }, [pokemon]);
 
+  // ── Load picks from Randomizer (sessionStorage) ──
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("randomizer_picks");
+      if (!raw) return;
+      const ids: string[] = JSON.parse(raw);
+      sessionStorage.removeItem("randomizer_picks");
+      const loaded = ids.flatMap(id => {
+        const mon = pokemon.find(p => p.id === id);
+        return mon ? [{ pokemon: mon, note: "" }] : [];
+      });
+      if (loaded.length > 0) {
+        setSlots(prev => {
+          const existingIds = new Set(prev.map(s => s.pokemon.id));
+          const newSlots = loaded.filter(s => !existingIds.has(s.pokemon.id));
+          return [...prev, ...newSlots].slice(0, 10);
+        });
+      }
+    } catch {
+      // sessionStorage unavailable (private browsing, etc.)
+    }
+  }, [pokemon]);
+
   // ── Builder helpers ──
   function toggleBuilder(mon: Pokemon) {
     setSlots(prev => {
