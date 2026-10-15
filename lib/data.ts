@@ -1,16 +1,16 @@
-import { createClient } from "@/lib/supabase/server";
+import { hasSupabaseEnv, createSupabaseServerClient } from "@/lib/supabase/server";
+import { pokemon, rulesHtml, schedule, seasons, stats, teamPokemon, teams } from "@/lib/mock-data";
 import type { Season, Team, Pokemon, TeamPokemon, ScheduleMatch, PokemonStats, Coach } from "@/lib/types";
 
 // ─── Seasons ─────────────────────────────────────────────────────────────────
 
 export async function getSeasons(): Promise<Season[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  if (!hasSupabaseEnv()) return seasons;
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase
     .from("seasons")
     .select("*")
     .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
 
   return (data ?? []).map(row => ({
     id:           row.id,
@@ -24,39 +24,17 @@ export async function getSeasons(): Promise<Season[]> {
   }));
 }
 
-export async function getActiveSeason(): Promise<Season | null> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("seasons")
-    .select("*")
-    .eq("active_season", true)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  if (!data) return null;
-
-  return {
-    id:           data.id,
-    name:         data.name,
-    draftBudget:  data.draft_budget,
-    rosterSize:   data.roster_size ?? undefined,
-    format:       data.format ?? undefined,
-    activeSeason: data.active_season,
-    archived:     data.archived,
-    createdAt:    data.created_at,
-  };
+export async function getActiveSeason(): Promise<Season> {
+  const all = await getSeasons();
+  return all.find(s => s.activeSeason) ?? all[0];
 }
 
 // ─── Coaches ─────────────────────────────────────────────────────────────────
 
 export async function getCoaches(): Promise<Coach[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("coaches")
-    .select("*")
-    .order("name");
-
-  if (error) throw new Error(error.message);
+  if (!hasSupabaseEnv()) return [];
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase.from("coaches").select("*").order("name");
 
   return (data ?? []).map(row => ({
     id:       row.id,
@@ -68,15 +46,15 @@ export async function getCoaches(): Promise<Coach[]> {
 
 // ─── Teams ───────────────────────────────────────────────────────────────────
 
-export async function getTeamsBySeason(seasonId: string): Promise<Team[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+export async function getTeams(seasonId?: string): Promise<Team[]> {
+  if (!hasSupabaseEnv()) return teams.filter(t => !seasonId || t.seasonId === seasonId);
+  const supabase = await createSupabaseServerClient();
+  const id = seasonId ?? (await getActiveSeason()).id;
+  const { data } = await supabase
     .from("teams")
     .select("*, coach:coaches(*)")
-    .eq("season_id", seasonId)
+    .eq("season_id", id)
     .order("wins", { ascending: false });
-
-  if (error) throw new Error(error.message);
 
   return (data ?? []).map(row => ({
     id:         row.id,
@@ -93,91 +71,91 @@ export async function getTeamsBySeason(seasonId: string): Promise<Team[]> {
   }));
 }
 
+export async function getTeam(id: string): Promise<Team | undefined> {
+  const all = await getTeams();
+  return all.find(t => t.id === id);
+}
+
 // ─── Pokémon ─────────────────────────────────────────────────────────────────
 
-export async function getAllPokemon(): Promise<Pokemon[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+export async function getPokemon(): Promise<Pokemon[]> {
+  if (!hasSupabaseEnv()) return pokemon;
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase
     .from("pokemon")
     .select("*")
-    .order("dex_number");
-
-  if (error) throw new Error(error.message);
+    .order("point_value", { ascending: false });
 
   return (data ?? []).map(row => ({
-    id:              row.id,
-    dexNumber:       row.dex_number,
-    name:            row.name,
-    spriteUrl:       row.sprite_url,
-    primaryType:     row.primary_type,
-    secondaryType:   row.secondary_type ?? null,
-    hp:              row.hp,
-    attack:          row.attack,
-    defense:         row.defense,
-    specialAttack:   row.special_attack,
-    specialDefense:  row.special_defense,
-    speed:           row.speed,
-    bst:             row.bst,
-    pointValue:      row.point_value,
-    legendary:       row.legendary,
-    mythical:        row.mythical,
-    paradox:         row.paradox,
-    banned:          row.banned ?? undefined,
+    id:             row.id,
+    dexNumber:      row.dex_number,
+    name:           row.name,
+    spriteUrl:      row.sprite_url,
+    primaryType:    row.primary_type,
+    secondaryType:  row.secondary_type ?? null,
+    hp:             row.hp,
+    attack:         row.attack,
+    defense:        row.defense,
+    specialAttack:  row.special_attack,
+    specialDefense: row.special_defense,
+    speed:          row.speed,
+    bst:            row.bst,
+    pointValue:     row.point_value,
+    legendary:      row.legendary,
+    mythical:       row.mythical,
+    paradox:        row.paradox,
+    banned:         row.banned ?? undefined,
   }));
 }
+
+export const getAllPokemon = getPokemon;
 
 // ─── Team Pokémon ─────────────────────────────────────────────────────────────
 
 export async function getTeamPokemon(seasonId: string): Promise<TeamPokemon[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  if (!hasSupabaseEnv()) return teamPokemon.filter(s => s.seasonId === seasonId);
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase
     .from("team_pokemon")
-    .select("*, pokemon:pokemon(*)")
+    .select("*, pokemon(*)")
     .eq("season_id", seasonId);
-
-  if (error) throw new Error(error.message);
 
   return (data ?? []).map(row => ({
     id:        row.id,
     seasonId:  row.season_id,
     teamId:    row.team_id,
     pokemonId: row.pokemon_id,
-    pokemon: row.pokemon
-      ? {
-          id:              row.pokemon.id,
-          dexNumber:       row.pokemon.dex_number,
-          name:            row.pokemon.name,
-          spriteUrl:       row.pokemon.sprite_url,
-          primaryType:     row.pokemon.primary_type,
-          secondaryType:   row.pokemon.secondary_type ?? null,
-          hp:              row.pokemon.hp,
-          attack:          row.pokemon.attack,
-          defense:         row.pokemon.defense,
-          specialAttack:   row.pokemon.special_attack,
-          specialDefense:  row.pokemon.special_defense,
-          speed:           row.pokemon.speed,
-          bst:             row.pokemon.bst,
-          pointValue:      row.pokemon.point_value,
-          legendary:       row.pokemon.legendary,
-          mythical:        row.pokemon.mythical,
-          paradox:         row.pokemon.paradox,
-          banned:          row.pokemon.banned ?? undefined,
-        }
-      : undefined,
+    pokemon: row.pokemon ? mapPokemon(row.pokemon) : undefined,
+  }));
+}
+
+export async function getRoster(teamId: string): Promise<TeamPokemon[]> {
+  if (!hasSupabaseEnv()) return teamPokemon.filter(s => s.teamId === teamId);
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase
+    .from("team_pokemon")
+    .select("*, pokemon(*)")
+    .eq("team_id", teamId);
+
+  return (data ?? []).map(row => ({
+    id:        row.id,
+    seasonId:  row.season_id,
+    teamId:    row.team_id,
+    pokemonId: row.pokemon_id,
+    pokemon: row.pokemon ? mapPokemon(row.pokemon) : undefined,
   }));
 }
 
 // ─── Schedule ─────────────────────────────────────────────────────────────────
 
 export async function getSchedule(seasonId: string): Promise<ScheduleMatch[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  if (!hasSupabaseEnv()) return schedule.filter(m => m.seasonId === seasonId);
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase
     .from("schedule_matches")
     .select("*")
     .eq("season_id", seasonId)
     .order("week");
-
-  if (error) throw new Error(error.message);
 
   return (data ?? []).map(row => ({
     id:       row.id,
@@ -190,22 +168,22 @@ export async function getSchedule(seasonId: string): Promise<ScheduleMatch[]> {
     homeDiff: row.home_diff ?? undefined,
     awayDiff: row.away_diff ?? undefined,
     isBye:    row.is_bye ?? false,
-    replay1:  row.replay1 ?? null,
-    replay2:  row.replay2 ?? null,
-    replay3:  row.replay3 ?? null,
+    replay1:  row.replay_1 ?? null,
+    replay2:  row.replay_2 ?? null,
+    replay3:  row.replay_3 ?? null,
   }));
 }
 
 // ─── Pokémon Stats ────────────────────────────────────────────────────────────
 
-export async function getPokemonStatsBySeason(seasonId: string): Promise<PokemonStats[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+export async function getStats(seasonId?: string): Promise<PokemonStats[]> {
+  if (!hasSupabaseEnv()) return stats.filter(r => !seasonId || r.seasonId === seasonId);
+  const supabase = await createSupabaseServerClient();
+  const id = seasonId ?? (await getActiveSeason()).id;
+  const { data } = await supabase
     .from("pokemon_stats")
-    .select("*, pokemon:pokemon(*), team:teams(*)")
-    .eq("season_id", seasonId);
-
-  if (error) throw new Error(error.message);
+    .select("*, pokemon(*), team:teams(*)")
+    .eq("season_id", id);
 
   return (data ?? []).map(row => ({
     id:          row.id,
@@ -217,28 +195,7 @@ export async function getPokemonStatsBySeason(seasonId: string): Promise<Pokemon
     losses:      row.losses,
     kos:         row.kos,
     deaths:      row.deaths,
-    pokemon: row.pokemon
-      ? {
-          id:              row.pokemon.id,
-          dexNumber:       row.pokemon.dex_number,
-          name:            row.pokemon.name,
-          spriteUrl:       row.pokemon.sprite_url,
-          primaryType:     row.pokemon.primary_type,
-          secondaryType:   row.pokemon.secondary_type ?? null,
-          hp:              row.pokemon.hp,
-          attack:          row.pokemon.attack,
-          defense:         row.pokemon.defense,
-          specialAttack:   row.pokemon.special_attack,
-          specialDefense:  row.pokemon.special_defense,
-          speed:           row.pokemon.speed,
-          bst:             row.pokemon.bst,
-          pointValue:      row.pokemon.point_value,
-          legendary:       row.pokemon.legendary,
-          mythical:        row.pokemon.mythical,
-          paradox:         row.pokemon.paradox,
-          banned:          row.pokemon.banned ?? undefined,
-        }
-      : undefined,
+    pokemon: row.pokemon ? mapPokemon(row.pokemon) : undefined,
     team: row.team
       ? {
           id:       row.team.id,
@@ -253,46 +210,36 @@ export async function getPokemonStatsBySeason(seasonId: string): Promise<Pokemon
   }));
 }
 
-// ─── Aliases / shims used by existing pages ───────────────────────────────────
+// ─── Rules ────────────────────────────────────────────────────────────────────
 
-export const getPokemon = getAllPokemon;
-export const getTeams   = getTeamsBySeason;
+export async function getRules(): Promise<string> {
+  if (!hasSupabaseEnv()) return rulesHtml;
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase.from("league_rules").select("content").eq("id", "default").single();
+  return data?.content ?? rulesHtml;
+}
 
-export async function getRoster(teamId: string): Promise<TeamPokemon[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("team_pokemon")
-    .select("*, pokemon:pokemon(*)")
-    .eq("team_id", teamId);
+// ─── Internal helper ─────────────────────────────────────────────────────────
 
-  if (error) throw new Error(error.message);
-
-  return (data ?? []).map(row => ({
-    id:        row.id,
-    seasonId:  row.season_id,
-    teamId:    row.team_id,
-    pokemonId: row.pokemon_id,
-    pokemon: row.pokemon
-      ? {
-          id:             row.pokemon.id,
-          dexNumber:      row.pokemon.dex_number,
-          name:           row.pokemon.name,
-          spriteUrl:      row.pokemon.sprite_url,
-          primaryType:    row.pokemon.primary_type,
-          secondaryType:  row.pokemon.secondary_type ?? null,
-          hp:             row.pokemon.hp,
-          attack:         row.pokemon.attack,
-          defense:        row.pokemon.defense,
-          specialAttack:  row.pokemon.special_attack,
-          specialDefense: row.pokemon.special_defense,
-          speed:          row.pokemon.speed,
-          bst:            row.pokemon.bst,
-          pointValue:     row.pokemon.point_value,
-          legendary:      row.pokemon.legendary,
-          mythical:       row.pokemon.mythical,
-          paradox:        row.pokemon.paradox,
-          banned:         row.pokemon.banned ?? undefined,
-        }
-      : undefined,
-  }));
+function mapPokemon(p: Record<string, unknown>): Pokemon {
+  return {
+    id:             p.id as string,
+    dexNumber:      p.dex_number as number,
+    name:           p.name as string,
+    spriteUrl:      p.sprite_url as string,
+    primaryType:    p.primary_type as string,
+    secondaryType:  (p.secondary_type as string) ?? null,
+    hp:             p.hp as number,
+    attack:         p.attack as number,
+    defense:        p.defense as number,
+    specialAttack:  p.special_attack as number,
+    specialDefense: p.special_defense as number,
+    speed:          p.speed as number,
+    bst:            p.bst as number,
+    pointValue:     p.point_value as number,
+    legendary:      p.legendary as boolean,
+    mythical:       p.mythical as boolean,
+    paradox:        p.paradox as boolean,
+    banned:         (p.banned as boolean) ?? undefined,
+  };
 }
