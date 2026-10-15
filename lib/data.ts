@@ -196,6 +196,47 @@ export async function getSchedule(seasonId: string): Promise<ScheduleMatch[]> {
   }));
 }
 
+// ─── Roster (Pokémon on a specific team) ─────────────────────────────────────
+
+export async function getRoster(teamId: string): Promise<TeamPokemon[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("team_pokemon")
+    .select("*, pokemon:pokemon(*)")
+    .eq("team_id", teamId);
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map(row => ({
+    id:        row.id,
+    seasonId:  row.season_id,
+    teamId:    row.team_id,
+    pokemonId: row.pokemon_id,
+    pokemon: row.pokemon
+      ? {
+          id:              row.pokemon.id,
+          dexNumber:       row.pokemon.dex_number,
+          name:            row.pokemon.name,
+          spriteUrl:       row.pokemon.sprite_url,
+          primaryType:     row.pokemon.primary_type,
+          secondaryType:   row.pokemon.secondary_type ?? null,
+          hp:              row.pokemon.hp,
+          attack:          row.pokemon.attack,
+          defense:         row.pokemon.defense,
+          specialAttack:   row.pokemon.special_attack,
+          specialDefense:  row.pokemon.special_defense,
+          speed:           row.pokemon.speed,
+          bst:             row.pokemon.bst,
+          pointValue:      row.pokemon.point_value,
+          legendary:       row.pokemon.legendary,
+          mythical:        row.pokemon.mythical,
+          paradox:         row.pokemon.paradox,
+          banned:          row.pokemon.banned ?? undefined,
+        }
+      : undefined,
+  }));
+}
+
 // ─── Pokémon Stats ────────────────────────────────────────────────────────────
 
 export async function getPokemonStatsBySeason(seasonId: string): Promise<PokemonStats[]> {
@@ -252,3 +293,12 @@ export async function getPokemonStatsBySeason(seasonId: string): Promise<Pokemon
       : undefined,
   }));
 }
+
+// ─── Aliases for backwards compatibility ─────────────────────────────────────
+// Some pages import these names — keep them in sync with the canonical versions.
+
+/** @deprecated Use getAllPokemon() */
+export const getPokemon = getAllPokemon;
+
+/** @deprecated Use getTeamsBySeason(seasonId) */
+export const getTeams = getTeamsBySeason;

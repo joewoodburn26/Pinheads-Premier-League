@@ -62,6 +62,41 @@ export async function updateRosterSize(seasonId: string, rosterSize: number) {
   revalidatePath("/settings");
 }
 
+/**
+ * Bulk-update Pokémon point values from a CSV.
+ * Expected CSV format: two columns — name (or dex number), pointValue.
+ * First row may be a header (skipped if non-numeric in col 2).
+ */
+export async function updatePointsFromCsv(csv: string) {
+  const supabase = await createClient();
+  const lines = csv.split("\n").map(l => l.trim()).filter(Boolean);
+
+  const updates: { name: string; pointValue: number }[] = [];
+  for (const line of lines) {
+    const parts = line.split(",");
+    if (parts.length < 2) continue;
+    const namePart  = parts[0].trim().replace(/^"|"$/g, "");
+    const ptsPart   = parts[1].trim().replace(/^"|"$/g, "");
+    const pts = Number(ptsPart);
+    if (isNaN(pts)) continue; // skip header or malformed rows
+    updates.push({ name: namePart, pointValue: pts });
+  }
+
+  if (updates.length === 0) throw new Error("No valid rows found in CSV.");
+
+  for (const { name, pointValue } of updates) {
+    // Try matching by name (case-insensitive); fall back to dex number if numeric
+    const isNum = /^\d+$/.test(name);
+    const { error } = isNum
+      ? await supabase.from("pokemon").update({ point_value: pointValue }).eq("dex_number", Number(name))
+      : await supabase.from("pokemon").update({ point_value: pointValue }).ilike("name", name);
+    if (error) throw new Error(`Failed to update ${name}: ${error.message}`);
+  }
+
+  revalidatePath("/settings");
+  revalidatePath("/draft");
+}
+
 export async function updateSeasonFormat(seasonId: string, format: string) {
   const supabase = await createClient();
   const { error } = await supabase
