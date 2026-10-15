@@ -5,13 +5,14 @@ import { ChevronDown } from "lucide-react";
 import type { Season, Team } from "@/lib/types";
 
 const nav = [
-  ["Schedule", "/schedule"],
-  ["Rosters",  "/rosters"],
-  ["Draft",    "/draft"],
-  ["Type Chart",   "/type-chart"],
-  ["Calculator",   "/damage-calculator"],
-  ["Stats",        "/stats"],
-  ["Rules",        "/rules"],
+  ["Schedule",    "/schedule"],
+  ["Rosters",     "/rosters"],
+  ["Draft",       "/draft"],
+  ["Randomizer",  "/randomizer"],
+  ["Type Chart",  "/type-chart"],
+  ["Calculator",  "/damage-calculator"],
+  ["Stats",       "/stats"],
+  ["Rules",       "/rules"],
 ];
 
 const settingsNav = [
