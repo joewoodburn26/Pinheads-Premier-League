@@ -46,6 +46,7 @@ export type Pokemon = {
   legendary: boolean;
   mythical: boolean;
   paradox: boolean;
+  ultraBeast?: boolean;
   banned?: boolean;
 };
 

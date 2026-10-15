@@ -9,7 +9,7 @@ import { pokemonTypesFor } from "@/lib/type-chart";
 import { toggleBan, updatePointValue } from "@/lib/pokedex-actions";
 import type { Pokemon, PokemonType } from "@/lib/types";
 
-type FilterTab = "all" | "active" | "banned" | "legendary" | "mythical" | "paradox";
+type FilterTab = "all" | "active" | "banned" | "legendary" | "mythical" | "paradox" | "ultra-beast";
 
 function BanToggle({ mon }: { mon: Pokemon & { banned?: boolean } }) {
   const [isPending, startTransition] = useTransition();
@@ -81,7 +81,8 @@ export function PokedexClient({ pokemon }: { pokemon: (Pokemon & { banned?: bool
     { key: "banned",    label: `Banned (${pokemon.filter(p => p.banned).length})`  },
     { key: "legendary", label: `Legendary`                                         },
     { key: "mythical",  label: `Mythical`                                          },
-    { key: "paradox",   label: `Paradox`                                           },
+    { key: "paradox",     label: `Paradox`                                               },
+    { key: "ultra-beast", label: `Ultra Beast`                                           },
   ];
 
   const filtered = useMemo(() => {
@@ -93,7 +94,8 @@ export function PokedexClient({ pokemon }: { pokemon: (Pokemon & { banned?: bool
       if (tab === "banned"    && !mon.banned)    return false;
       if (tab === "legendary" && !mon.legendary) return false;
       if (tab === "mythical"  && !mon.mythical)  return false;
-      if (tab === "paradox"   && !mon.paradox)   return false;
+      if (tab === "paradox"     && !mon.paradox)    return false;
+      if (tab === "ultra-beast" && !mon.ultraBeast) return false;
       return true;
     });
   }, [pokemon, query, tab, typeFilter]);
@@ -197,7 +199,7 @@ export function PokedexClient({ pokemon }: { pokemon: (Pokemon & { banned?: bool
                   <PointEditor mon={mon} />
                 </td>
                 <td className="p-3 text-center text-xs text-muted-foreground">
-                  {mon.legendary ? "Legendary" : mon.mythical ? "Mythical" : mon.paradox ? "Paradox" : "—"}
+                  {mon.legendary ? "Legendary" : mon.mythical ? "Mythical" : mon.paradox ? "Paradox" : mon.ultraBeast ? "Ultra Beast" : "—"}
                 </td>
                 <td className="p-3 text-center">
                   <BanToggle mon={mon} />

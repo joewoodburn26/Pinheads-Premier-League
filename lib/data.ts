@@ -104,6 +104,7 @@ export async function getPokemon(): Promise<Pokemon[]> {
     legendary:      row.legendary,
     mythical:       row.mythical,
     paradox:        row.paradox,
+    ultraBeast:     row.ultra_beast ?? false,
     banned:         row.banned ?? undefined,
   }));
 }
@@ -240,6 +241,7 @@ function mapPokemon(p: Record<string, unknown>): Pokemon {
     legendary:      p.legendary as boolean,
     mythical:       p.mythical as boolean,
     paradox:        p.paradox as boolean,
+    ultraBeast:     (p.ultra_beast as boolean) ?? false,
     banned:         (p.banned as boolean) ?? undefined,
   };
 }
