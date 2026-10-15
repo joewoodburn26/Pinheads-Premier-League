@@ -1,6 +1,6 @@
 import { hasSupabaseEnv, createSupabaseServerClient } from "@/lib/supabase/server";
 import { pokemon, rulesHtml, schedule, seasons, stats, teamPokemon, teams } from "@/lib/mock-data";
-import type { Season, Team, Pokemon, TeamPokemon, ScheduleMatch, PokemonStats, Coach } from "@/lib/types";
+import type { Season, Team, Pokemon, TeamPokemon, ScheduleMatch, PokemonStats, Coach, PokemonType } from "@/lib/types";
 
 // ─── Seasons ─────────────────────────────────────────────────────────────────
 
@@ -227,8 +227,8 @@ function mapPokemon(p: Record<string, unknown>): Pokemon {
     dexNumber:      p.dex_number as number,
     name:           p.name as string,
     spriteUrl:      p.sprite_url as string,
-    primaryType:    p.primary_type as string,
-    secondaryType:  (p.secondary_type as string) ?? null,
+    primaryType:    p.primary_type as PokemonType,
+    secondaryType:  (p.secondary_type as PokemonType) ?? null,
     hp:             p.hp as number,
     attack:         p.attack as number,
     defense:        p.defense as number,
