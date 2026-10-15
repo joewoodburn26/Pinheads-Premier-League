@@ -19,6 +19,7 @@ export function RostersClient({
   rosterSize?: number;
 }) {
   const [rosters, setRosters] = useState(initialRosters);
+  const availablePokemon = allPokemon.filter(p => !p.banned);
 
   useEffect(() => {
     setRosters(initialRosters);
@@ -43,7 +44,7 @@ export function RostersClient({
             teamId={team.id}
             seasonId={seasonId}
             slots={slots}
-            allPokemon={allPokemon}
+            allPokemon={availablePokemon}
             rosterSize={rosterSize}
           />
         </section>
