@@ -1,13 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 // ─── Season actions ───────────────────────────────────────────────────────────
 
 export async function createNewSeason(formData: FormData) {
-  const supabase = await createClient();
-  const name       = String(formData.get("name") ?? "New Season");
+  const supabase = createSupabaseAdminClient();
+  const name        = String(formData.get("name") ?? "New Season");
   const draftBudget = Number(formData.get("draftBudget") ?? 100);
   const rosterSize  = Number(formData.get("rosterSize") ?? 10);
   const format      = String(formData.get("format") ?? "all");
@@ -21,9 +21,8 @@ export async function createNewSeason(formData: FormData) {
 }
 
 export async function setActiveSeason(seasonId: string) {
-  const supabase = await createClient();
+  const supabase = createSupabaseAdminClient();
 
-  // Deactivate all, then activate the selected one
   await supabase.from("seasons").update({ active_season: false }).neq("id", "00000000-0000-0000-0000-000000000000");
   const { error } = await supabase.from("seasons").update({ active_season: true }).eq("id", seasonId);
 
@@ -33,7 +32,7 @@ export async function setActiveSeason(seasonId: string) {
 }
 
 export async function archiveSeason(seasonId: string) {
-  const supabase = await createClient();
+  const supabase = createSupabaseAdminClient();
   const { error } = await supabase
     .from("seasons")
     .update({ archived: true, active_season: false })
@@ -44,7 +43,7 @@ export async function archiveSeason(seasonId: string) {
 }
 
 export async function deleteSeason(seasonId: string) {
-  const supabase = await createClient();
+  const supabase = createSupabaseAdminClient();
   const { error } = await supabase.from("seasons").delete().eq("id", seasonId);
 
   if (error) throw new Error(error.message);
@@ -52,7 +51,7 @@ export async function deleteSeason(seasonId: string) {
 }
 
 export async function updateRosterSize(seasonId: string, rosterSize: number) {
-  const supabase = await createClient();
+  const supabase = createSupabaseAdminClient();
   const { error } = await supabase
     .from("seasons")
     .update({ roster_size: rosterSize })
@@ -63,7 +62,7 @@ export async function updateRosterSize(seasonId: string, rosterSize: number) {
 }
 
 export async function updateSeasonFormat(seasonId: string, format: string) {
-  const supabase = await createClient();
+  const supabase = createSupabaseAdminClient();
   const { error } = await supabase
     .from("seasons")
     .update({ format })
@@ -74,7 +73,7 @@ export async function updateSeasonFormat(seasonId: string, format: string) {
 }
 
 export async function updatePointsFromCsv(csv: string) {
-  const supabase = await createClient();
+  const supabase = createSupabaseAdminClient();
   const lines = csv.split("\n").map((l: string) => l.trim()).filter(Boolean);
 
   const updates: { name: string; pointValue: number }[] = [];
@@ -105,10 +104,9 @@ export async function updatePointsFromCsv(csv: string) {
 // ─── Team actions ─────────────────────────────────────────────────────────────
 
 export async function applyTeamChanges(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = createSupabaseAdminClient();
   const seasonId = String(formData.get("seasonId") ?? "");
 
-  // Parse coach assignments: field name "team_<teamId>" = coachId
   const entries = Array.from(formData.entries());
   const teamUpdates = entries
     .filter(([k]) => k.startsWith("team_"))
@@ -127,9 +125,8 @@ export async function applyTeamChanges(formData: FormData) {
 }
 
 export async function regenerateSchedule(seasonId: string) {
-  const supabase = await createClient();
+  const supabase = createSupabaseAdminClient();
 
-  // Fetch teams for this season
   const { data: teams, error: teamsError } = await supabase
     .from("teams")
     .select("id")
@@ -138,10 +135,8 @@ export async function regenerateSchedule(seasonId: string) {
   if (teamsError) throw new Error(teamsError.message);
   if (!teams || teams.length < 2) throw new Error("Need at least 2 teams to generate a schedule.");
 
-  // Delete existing schedule
   await supabase.from("schedule_matches").delete().eq("season_id", seasonId);
 
-  // Generate round-robin (with bye if odd number)
   const ids = teams.map(t => t.id);
   if (ids.length % 2 !== 0) ids.push("BYE");
   const n = ids.length;
@@ -157,7 +152,6 @@ export async function regenerateSchedule(seasonId: string) {
       }
     }
     rounds.push(matches);
-    // rotate: fix last, rotate rest
     ids.splice(1, 0, ids.pop()!);
   }
 

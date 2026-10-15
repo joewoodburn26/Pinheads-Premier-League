@@ -7,6 +7,15 @@ export default async function DraftPage() {
   const season = await getActiveSeason();
   const pokemon = await getPokemon();
 
+  if (!season) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-4xl font-black">Draft Room</h1>
+        <p className="text-muted-foreground">No active season found. Set an active season in Settings.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
