@@ -229,32 +229,48 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
     fd.set("copyPoints",     String(copyPoints));
     fd.set("pointsSourceId", pointsSourceId);
     startTransition(async () => {
-      const result = await createNewSeason(fd);
-      if (result.ok) { setName(""); flash(`✓ Season created with ${teamCount} teams and auto-generated schedule`); }
-      else flash(`✗ ${result.error ?? "Failed"}`);
+      try {
+        await createNewSeason(fd);
+        setName("");
+        flash(`✓ Season created with ${teamCount} teams and auto-generated schedule`);
+      } catch (err) {
+        flash(`✗ ${err instanceof Error ? err.message : "Failed"}`);
+      }
     });
   }
 
   function handleSetActive(seasonId: string) {
-    const fd = new FormData();
-    fd.set("seasonId", seasonId);
-    startTransition(async () => { await setActiveSeason(fd); flash("✓ Active season updated"); });
+    startTransition(async () => {
+      try {
+        await setActiveSeason(seasonId);
+        flash("✓ Active season updated");
+      } catch (err) {
+        flash(`✗ ${err instanceof Error ? err.message : "Failed"}`);
+      }
+    });
   }
 
   function handleArchive(seasonId: string) {
-    const fd = new FormData();
-    fd.set("seasonId", seasonId);
-    startTransition(async () => { await archiveSeason(fd); flash("✓ Archived"); });
+    startTransition(async () => {
+      try {
+        await archiveSeason(seasonId);
+        flash("✓ Archived");
+      } catch (err) {
+        flash(`✗ ${err instanceof Error ? err.message : "Failed"}`);
+      }
+    });
   }
 
   function handleDeleteSeason() {
     if (!confirmDeleteSeason) return;
-    const fd = new FormData();
-    fd.set("seasonId", confirmDeleteSeason.id);
     startTransition(async () => {
-      await deleteSeason(fd);
-      setConfirmDeleteSeason(null);
-      flash("✓ Season deleted");
+      try {
+        await deleteSeason(confirmDeleteSeason.id);
+        setConfirmDeleteSeason(null);
+        flash("✓ Season deleted");
+      } catch (err) {
+        flash(`✗ ${err instanceof Error ? err.message : "Failed"}`);
+      }
     });
   }
 
@@ -275,22 +291,27 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
     fd.set("toAdd",    JSON.stringify(teamsToAdd));
     fd.set("toRemove", JSON.stringify(teamsToRemove));
     startTransition(async () => {
-      const result = await applyTeamChanges(fd);
-      if (result.ok) {
+      try {
+        await applyTeamChanges(fd);
         setTeamsToAdd([]);
         setTeamsToRemove([]);
         setShowConfirm(false);
         flash("✓ Changes applied and schedule regenerated");
-      } else flash("✗ Failed to apply changes");
+      } catch (err) {
+        flash(`✗ ${err instanceof Error ? err.message : "Failed to apply changes"}`);
+      }
     });
   }
 
   function handleRegenerateSchedule() {
     if (!activeSeason) return;
     startTransition(async () => {
-      const result = await regenerateSchedule(activeSeason.id);
-      if (result.ok) flash("✓ Schedule regenerated with new random matchups");
-      else flash(`✗ ${result.error ?? "Failed"}`);
+      try {
+        await regenerateSchedule(activeSeason.id);
+        flash("✓ Schedule regenerated with new random matchups");
+      } catch (err) {
+        flash(`✗ ${err instanceof Error ? err.message : "Failed"}`);
+      }
     });
   }
 
