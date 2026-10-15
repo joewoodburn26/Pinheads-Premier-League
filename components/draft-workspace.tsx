@@ -637,7 +637,7 @@ function TeamBuilder({
 
 export function DraftWorkspace({ pokemon, budget, seasonName }: { pokemon: Pokemon[]; budget: number; seasonName?: string }) {
   const legal = useMemo(
-    () => pokemon.filter((m) => !m.legendary && !m.mythical && !m.paradox),
+    () => pokemon.filter((m) => !m.banned && !m.legendary && !m.mythical && !m.paradox),
     [pokemon]
   );
 
