@@ -152,15 +152,20 @@ export function PointRestructureClient({
   function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const fd = new FormData();
-    fd.set("file", file);
-    fd.set("seasonId", seasonId);
-    startTransition(async () => {
-      const result = await updatePointsFromCsv(fd);
-      if (result.ok) setCsvMsg(`✓ Updated ${result.updated} Pokémon from CSV`);
-      else           setCsvMsg(`✗ ${result.error ?? "Upload failed"}`);
-      setTimeout(() => setCsvMsg(""), 4000);
-    });
+    const reader = new FileReader();
+    reader.onload = () => {
+      const csvText = reader.result as string;
+      startTransition(async () => {
+        try {
+          await updatePointsFromCsv(csvText);
+          setCsvMsg(`✓ Updated Pokémon points from CSV`);
+        } catch (err) {
+          setCsvMsg(`✗ ${err instanceof Error ? err.message : "Upload failed"}`);
+        }
+        setTimeout(() => setCsvMsg(""), 4000);
+      });
+    };
+    reader.readAsText(file);
   }
 
   return (
