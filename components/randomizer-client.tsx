@@ -87,16 +87,58 @@ async function fetchEvoMap(): Promise<Map<string, EvoInfo>> {
     const url = "https://raw.githubusercontent.com/smogon/pokemon-showdown/master/data/pokedex.ts";
     const text = await fetchShowdown(url);
     const map = new Map<string, EvoInfo>();
-    // Match blocks like: bulbasaur: { ... prevo:"..." ... evos:[...] ... }
-    const entryRe = /^\s{0,4}(\w+)\s*:\s*\{([\s\S]*?)\},?\s*$/gm;
-    let m: RegExpExecArray | null;
-    while ((m = entryRe.exec(text)) !== null) {
-      const name = m[1].toLowerCase();
-      const body = m[2];
-      const hasPrev = /\bprevo\s*:/.test(body);
-      const hasEvos = /\bevos\s*:/.test(body);
-      map.set(name, { hasPrev, hasEvos });
+
+    // Parse line-by-line. Each top-level entry looks like:
+    //   \tpokemonname: {
+    //     ...fields...
+    //   },
+    // We track depth with a brace counter so we know when we exit an entry.
+    const lines = text.split("\n");
+    let currentName = "";
+    let depth = 0;
+    let hasPrev = false;
+    let hasEvos = false;
+
+    // Matches the start of a top-level entry: one tab + identifier + ": {"
+    const entryStart = /^\t([a-z0-9]+)\s*:\s*\{/i;
+
+    for (const line of lines) {
+      if (depth === 0) {
+        const m = entryStart.exec(line);
+        if (m) {
+          currentName = m[1].toLowerCase();
+          hasPrev = false;
+          hasEvos = false;
+          depth = 1;
+          // count any additional open/close braces on this same line
+          for (let i = line.indexOf("{") + 1; i < line.length; i++) {
+            if (line[i] === "{") depth++;
+            else if (line[i] === "}") { depth--; if (depth === 0) break; }
+          }
+          if (depth === 0 && currentName) {
+            map.set(currentName, { hasPrev, hasEvos });
+            currentName = "";
+          }
+        }
+      } else {
+        // Inside an entry — scan for prevo / evos fields
+        if (/\bprevo\s*:/.test(line)) hasPrev = true;
+        if (/\bevos\s*:/.test(line)) hasEvos = true;
+        // Track brace depth
+        for (const ch of line) {
+          if (ch === "{") depth++;
+          else if (ch === "}") {
+            depth--;
+            if (depth === 0) {
+              if (currentName) map.set(currentName, { hasPrev, hasEvos });
+              currentName = "";
+              break;
+            }
+          }
+        }
+      }
     }
+
     return map;
   });
 }
