@@ -4,6 +4,15 @@ import type { Pokemon } from "@/lib/types";
 
 export default async function DamageCalculatorPage() {
   const season = await getActiveSeason();
+  if (!season) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-black">Damage Calculator</h1>
+        <p className="text-muted-foreground">No active season found. Set an active season in Settings.</p>
+      </div>
+    );
+  }
+
   const [pokemon, teams] = await Promise.all([
     getPokemon(),
     getTeams(season.id),
