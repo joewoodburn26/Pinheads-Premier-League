@@ -3,6 +3,7 @@ export type Season = {
   name: string;
   draftBudget: number;
   rosterSize?: number;
+  format?: string;          // e.g. "all", "gen9", "champs", "gen8" …
   activeSeason: boolean;
   archived: boolean;
   createdAt: string;

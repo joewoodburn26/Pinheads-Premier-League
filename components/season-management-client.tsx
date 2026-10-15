@@ -8,9 +8,25 @@ import { Input } from "@/components/ui/input";
 import {
   createNewSeason, setActiveSeason, archiveSeason,
   deleteSeason, applyTeamChanges, regenerateSchedule,
-  updateRosterSize,
+  updateRosterSize, updateSeasonFormat,
 } from "@/lib/settings-actions";
 import type { Season, Team } from "@/lib/types";
+
+// ─── Format options (shared with randomizer) ─────────────────────────────────
+
+const FORMAT_OPTIONS = [
+  { label: "All Pokémon (no restriction)", value: "all" },
+  { label: "Gen 9 National Dex",           value: "gen9" },
+  { label: "Pokémon Champions",            value: "champs" },
+  { label: "Gen 8 National Dex",           value: "gen8" },
+  { label: "Gen 7 National Dex",           value: "gen7" },
+  { label: "Gen 6 National Dex",           value: "gen6" },
+  { label: "Gen 5 National Dex",           value: "gen5" },
+  { label: "Gen 4 National Dex",           value: "gen4" },
+  { label: "Gen 3 National Dex",           value: "gen3" },
+  { label: "Gen 2 National Dex",           value: "gen2" },
+  { label: "Gen 1 National Dex",           value: "gen1" },
+];
 
 // ─── Delete warning modal ─────────────────────────────────────────────────────
 
@@ -58,59 +74,103 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   );
 }
 
-// ─── Roster size editor ────────────────────────────────────────────────────────
+// ─── Season settings editor (roster size + format) ────────────────────────────
 
-function RosterSizeEditor({ season }: { season: Season }) {
+function SeasonSettingsEditor({ season }: { season: Season }) {
   const [isPending, startTransition] = useTransition();
+
+  // Roster size
   const [size,    setSize]    = useState(season.rosterSize ?? 10);
   const [confirm, setConfirm] = useState(false);
-  const [saved,   setSaved]   = useState(false);
+  const [sizeSaved, setSizeSaved] = useState(false);
 
-  function handleSave() {
+  // Format
+  const [format,      setFormat]      = useState(season.format ?? "all");
+  const [formatSaved, setFormatSaved] = useState(false);
+
+  function handleSaveSize() {
     startTransition(async () => {
       await updateRosterSize(season.id, size);
-      setSaved(true);
+      setSizeSaved(true);
       setConfirm(false);
-      setTimeout(() => setSaved(false), 2000);
+      setTimeout(() => setSizeSaved(false), 2000);
+    });
+  }
+
+  function handleSaveFormat() {
+    startTransition(async () => {
+      await updateSeasonFormat(season.id, format);
+      setFormatSaved(true);
+      setTimeout(() => setFormatSaved(false), 2000);
     });
   }
 
   return (
-    <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold">Roster Size</p>
-          <p className="text-xs text-muted-foreground">Max Pokémon per team. Reducing will remove Pokémon over the limit.</p>
+    <div className="space-y-4">
+      {/* Roster size */}
+      <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold">Roster Size</p>
+            <p className="text-xs text-muted-foreground">Max Pokémon per team. Reducing will remove Pokémon over the limit.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setSize(s => Math.max(1, s - 1)); setConfirm(false); }}
+              className="rounded-md border bg-muted px-2 py-1.5 hover:bg-muted/80"><Minus size={14} /></button>
+            <span className="text-xl font-black w-8 text-center">{size}</span>
+            <button onClick={() => { setSize(s => Math.min(20, s + 1)); setConfirm(false); }}
+              className="rounded-md border bg-muted px-2 py-1.5 hover:bg-muted/80"><Plus size={14} /></button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => { setSize(s => Math.max(1, s - 1)); setConfirm(false); }}
-            className="rounded-md border bg-muted px-2 py-1.5 hover:bg-muted/80"><Minus size={14} /></button>
-          <span className="text-xl font-black w-8 text-center">{size}</span>
-          <button onClick={() => { setSize(s => Math.min(20, s + 1)); setConfirm(false); }}
-            className="rounded-md border bg-muted px-2 py-1.5 hover:bg-muted/80"><Plus size={14} /></button>
+        {size !== (season.rosterSize ?? 10) && (
+          <div className="space-y-2">
+            {size < (season.rosterSize ?? 10) && !confirm && (
+              <p className="text-xs text-yellow-400">
+                ⚠️ Reducing from {season.rosterSize} to {size} will permanently remove Pokémon in slots {size + 1} to {season.rosterSize} for every team.
+              </p>
+            )}
+            <div className="flex gap-2">
+              {size < (season.rosterSize ?? 10) && !confirm ? (
+                <Button onClick={() => setConfirm(true)} variant="secondary">I understand — show confirm</Button>
+              ) : (
+                <Button onClick={handleSaveSize} disabled={isPending}
+                  className={size < (season.rosterSize ?? 10) ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}>
+                  {isPending ? "Saving…" : `Save Roster Size (${size})`}
+                </Button>
+              )}
+              <Button variant="secondary" onClick={() => { setSize(season.rosterSize ?? 10); setConfirm(false); }}>Reset</Button>
+            </div>
+            {sizeSaved && <p className="text-xs text-green-400">✓ Roster size updated</p>}
+          </div>
+        )}
+      </div>
+
+      {/* Format / Generation */}
+      <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+        <div>
+          <p className="text-sm font-semibold">Format / Generation</p>
+          <p className="text-xs text-muted-foreground">
+            The Pokémon Showdown format this season uses. Shown as context for drafters — does not enforce legality automatically.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <select
+            value={format}
+            onChange={e => setFormat(e.target.value)}
+            className="rounded-md border bg-background px-3 py-2 text-sm flex-1 min-w-0"
+          >
+            {FORMAT_OPTIONS.map(f => (
+              <option key={f.value} value={f.value}>{f.label}</option>
+            ))}
+          </select>
+          {format !== (season.format ?? "all") && (
+            <Button onClick={handleSaveFormat} disabled={isPending}>
+              {isPending ? "Saving…" : "Save Format"}
+            </Button>
+          )}
+          {formatSaved && <p className="text-xs text-green-400">✓ Format updated</p>}
         </div>
       </div>
-      {size !== (season.rosterSize ?? 10) && (
-        <div className="space-y-2">
-          {size < (season.rosterSize ?? 10) && !confirm && (
-            <p className="text-xs text-yellow-400">
-              ⚠️ Reducing from {season.rosterSize} to {size} will permanently remove Pokémon in slots {size + 1} to {season.rosterSize} for every team.
-            </p>
-          )}
-          <div className="flex gap-2">
-            {size < (season.rosterSize ?? 10) && !confirm ? (
-              <Button onClick={() => setConfirm(true)} variant="secondary">I understand — show confirm</Button>
-            ) : (
-              <Button onClick={handleSave} disabled={isPending}
-                className={size < (season.rosterSize ?? 10) ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}>
-                {isPending ? "Saving…" : `Save Roster Size (${size})`}
-              </Button>
-            )}
-            <Button variant="secondary" onClick={() => { setSize(season.rosterSize ?? 10); setConfirm(false); }}>Reset</Button>
-          </div>
-          {saved && <p className="text-xs text-green-400">✓ Roster size updated</p>}
-        </div>
-      )}
     </div>
   );
 }
@@ -127,6 +187,7 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
   const [budget,      setBudget]     = useState(105);
   const [teamCount,   setTeamCount]  = useState(8);
   const [rosterSize,  setRosterSize] = useState(10);
+  const [newFormat,   setNewFormat]  = useState("all");
   const [sourceId,    setSourceId]   = useState("");
   const [copyNames,   setCopyNames]  = useState(true);
   const [copyCoaches, setCopyCoaches]= useState(false);
@@ -159,6 +220,7 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
     fd.set("budget",         String(budget));
     fd.set("teamCount",      String(teamCount));
     fd.set("rosterSize",     String(rosterSize));
+    fd.set("format",         newFormat);
     fd.set("sourceSeasonId", sourceId);
     fd.set("copyNames",      String(copyNames));
     fd.set("copyCoaches",    String(copyCoaches));
@@ -295,6 +357,13 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
             <Input type="number" value={budget} onChange={e => setBudget(Number(e.target.value))} />
           </div>
           <div className="space-y-1">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Format / Generation</label>
+            <select value={newFormat} onChange={e => setNewFormat(e.target.value)}
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm">
+              {FORMAT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Roster Size <span className="text-muted-foreground/60">(per team)</span>
             </label>
@@ -348,7 +417,7 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
             </div>
           )}
 
-          {/* Points source — always shown, independent of copy-from */}
+          {/* Points source */}
           <div className="space-y-2 border-t pt-3 mt-2">
             <div className="flex items-center justify-between">
               <div>
@@ -400,8 +469,8 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
             </button>
           </div>
 
-          {/* Roster size editor */}
-          <RosterSizeEditor season={activeSeason} />
+          {/* Season settings (roster size + format) */}
+          <SeasonSettingsEditor season={activeSeason} />
 
           {/* Add team */}
           <div className="flex gap-3">
@@ -480,7 +549,12 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
                 <p className="font-semibold">{s.name}</p>
                 {s.activeSeason && <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">ACTIVE</span>}
               </div>
-              <p className="text-xs text-muted-foreground">Budget: {s.draftBudget} pts</p>
+              <p className="text-xs text-muted-foreground">
+                Budget: {s.draftBudget} pts
+                {s.format && s.format !== "all" && (
+                  <> · {FORMAT_OPTIONS.find(f => f.value === s.format)?.label ?? s.format}</>
+                )}
+              </p>
             </div>
             <div className="flex gap-2">
               {!s.activeSeason && (

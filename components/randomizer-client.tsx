@@ -198,7 +198,7 @@ export function RandomizerClient({ allPokemon }: { allPokemon: Pokemon[] }) {
   const [allowLegendary, setAllowLegendary] = useState(false);
   const [allowMythical,  setAllowMythical]  = useState(false);
   const [allowParadox,   setAllowParadox]   = useState(false);
-  const [formatValue, setFormatValue]   = useState("gen9");
+  const [formatValue, setFormatValue]   = useState("all");
   const [budgetCap, setBudgetCap]       = useState<number | "">("");
   const [stageFilter, setStageFilter]   = useState<StageFilter>("any");
   // Draft legality: "legal" = only non-banned (default), "banned" = only banned, "any" = all
