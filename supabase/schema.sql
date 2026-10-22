@@ -147,3 +147,14 @@ create table if not exists matchup_notes (
   primary key (team_id, opponent_team_id)
 );
 alter table matchup_notes enable row level security;
+
+-- Per-season point values (see supabase/season-points.sql)
+create table if not exists season_point_values (
+  season_id text not null references seasons(id) on delete cascade,
+  pokemon_id text not null references pokemon(id) on delete cascade,
+  point_value integer not null,
+  primary key (season_id, pokemon_id)
+);
+create unique index if not exists season_point_values_season_pokemon_idx
+  on season_point_values (season_id, pokemon_id);
+alter table season_point_values enable row level security;

@@ -104,7 +104,7 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
     fd.set("copyLogos",      String(copyLogos));
     startTransition(async () => {
       try {
-        await createNewSeason(fd);
+        { const r = await createNewSeason(fd); if (r.error) throw new Error(r.error); }
         setName("");
         flash(`✓ Season created with ${teamCount} teams and auto-generated schedule`);
       } catch (err) {
@@ -116,7 +116,7 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
   function handleSetActive(seasonId: string) {
     startTransition(async () => {
       try {
-        await setActiveSeason(seasonId);
+        { const r = await setActiveSeason(seasonId); if (r.error) throw new Error(r.error); }
         flash("✓ Active season updated");
       } catch (err) {
         flash(`✗ ${err instanceof Error ? err.message : "Failed"}`);
@@ -127,7 +127,7 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
   function handleArchive(seasonId: string) {
     startTransition(async () => {
       try {
-        await archiveSeason(seasonId);
+        { const r = await archiveSeason(seasonId); if (r.error) throw new Error(r.error); }
         flash("✓ Archived");
       } catch (err) {
         flash(`✗ ${err instanceof Error ? err.message : "Failed"}`);
@@ -139,7 +139,7 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
     if (!confirmDeleteSeason) return;
     startTransition(async () => {
       try {
-        await deleteSeason(confirmDeleteSeason.id);
+        { const r = await deleteSeason(confirmDeleteSeason.id); if (r.error) throw new Error(r.error); }
         setConfirmDeleteSeason(null);
         flash("✓ Season deleted");
       } catch (err) {
@@ -166,7 +166,7 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
     fd.set("toRemove", JSON.stringify(teamsToRemove));
     startTransition(async () => {
       try {
-        await applyTeamChanges(fd);
+        { const r = await applyTeamChanges(fd); if (r.error) throw new Error(r.error); }
         setTeamsToAdd([]);
         setTeamsToRemove([]);
         setShowConfirm(false);
@@ -181,7 +181,7 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
     if (!activeSeason) return;
     startTransition(async () => {
       try {
-        await regenerateSchedule(activeSeason.id);
+        { const r = await regenerateSchedule(activeSeason.id); if (r.error) throw new Error(r.error); }
         flash("✓ Schedule regenerated with new random matchups");
       } catch (err) {
         flash(`✗ ${err instanceof Error ? err.message : "Failed"}`);

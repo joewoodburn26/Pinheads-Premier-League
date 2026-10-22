@@ -1,10 +1,13 @@
+import { cache } from "react";
 import { hasSupabaseEnv, createSupabaseServerClient } from "@/lib/supabase/server";
 import { pokemon, rulesHtml, schedule, seasons, stats, teamPokemon, teams } from "@/lib/mock-data";
 import type { Season, Team, Pokemon, TeamPokemon, ScheduleMatch, PokemonStats, Coach, PokemonType } from "@/lib/types";
 
 // ─── Seasons ─────────────────────────────────────────────────────────────────
 
-export async function getSeasons(): Promise<Season[]> {
+export const getSeasons = cache(loadSeasons);
+
+async function loadSeasons(): Promise<Season[]> {
   if (!hasSupabaseEnv()) return seasons;
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
@@ -79,7 +82,51 @@ export async function getTeam(id: string): Promise<Team | undefined> {
 
 // ─── Pokémon ─────────────────────────────────────────────────────────────────
 
-export async function getPokemon(): Promise<Pokemon[]> {
+// ─── Season point values ──────────────────────────────────────────────────────
+// A season can override any Pokémon's points (Point Restructure / CSV import /
+// "Copy Points"). Everything below uses the season's value when one exists.
+
+const getSeasonPoints = cache(async (seasonId: string): Promise<Map<string, number>> => {
+  if (!hasSupabaseEnv() || !seasonId) return new Map();
+  const supabase = await createSupabaseServerClient();
+  const map = new Map<string, number>();
+  // Page through in case a season overrides every Pokémon
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from("season_point_values")
+      .select("pokemon_id, point_value")
+      .eq("season_id", seasonId)
+      .range(from, from + 999);
+    if (error || !data) break;
+    for (const row of data) map.set(row.pokemon_id as string, row.point_value as number);
+    if (data.length < 1000) break;
+  }
+  return map;
+});
+
+function applyPoints<T extends { id: string; pointValue: number }>(mon: T, points: Map<string, number>): T {
+  const override = points.get(mon.id);
+  return override === undefined ? mon : { ...mon, pointValue: override };
+}
+
+async function applySlotPoints(slots: TeamPokemon[]): Promise<TeamPokemon[]> {
+  const seasonId = slots[0]?.seasonId;
+  if (!seasonId) return slots;
+  const points = await getSeasonPoints(seasonId);
+  if (points.size === 0) return slots;
+  return slots.map((s) => (s.pokemon ? { ...s, pokemon: applyPoints(s.pokemon, points) } : s));
+}
+
+/** Pokémon with points for a season (default: the active season). */
+export async function getPokemon(seasonId?: string): Promise<Pokemon[]> {
+  const base = await getBasePokemon();
+  const id = seasonId ?? (await getActiveSeason())?.id;
+  const points = id ? await getSeasonPoints(id) : new Map<string, number>();
+  return points.size === 0 ? base : base.map((p) => applyPoints(p, points));
+}
+
+/** Pokémon with their base (Pokédex) points, ignoring season overrides. */
+export async function getBasePokemon(): Promise<Pokemon[]> {
   if (!hasSupabaseEnv()) return pokemon;
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
@@ -119,13 +166,13 @@ export async function getTeamPokemon(seasonId: string): Promise<TeamPokemon[]> {
   const supabase = await createSupabaseServerClient();
   const data = await selectSlotsInOrder(supabase, "season_id", seasonId);
 
-  return (data ?? []).map(row => ({
+  return applySlotPoints((data ?? []).map(row => ({
     id:        row.id,
     seasonId:  row.season_id,
     teamId:    row.team_id,
     pokemonId: row.pokemon_id,
     pokemon: row.pokemon ? mapPokemon(row.pokemon) : undefined,
-  }));
+  })));
 }
 
 export async function getRoster(teamId: string): Promise<TeamPokemon[]> {
@@ -133,13 +180,13 @@ export async function getRoster(teamId: string): Promise<TeamPokemon[]> {
   const supabase = await createSupabaseServerClient();
   const data = await selectSlotsInOrder(supabase, "team_id", teamId);
 
-  return (data ?? []).map(row => ({
+  return applySlotPoints((data ?? []).map(row => ({
     id:        row.id,
     seasonId:  row.season_id,
     teamId:    row.team_id,
     pokemonId: row.pokemon_id,
     pokemon: row.pokemon ? mapPokemon(row.pokemon) : undefined,
-  }));
+  })));
 }
 
 /**
@@ -200,6 +247,7 @@ export async function getStats(seasonId?: string): Promise<PokemonStats[]> {
     .from("pokemon_stats")
     .select("*, pokemon(*), team:teams(*)")
     .eq("season_id", id);
+  const points = await getSeasonPoints(id);
 
   return (data ?? []).map(row => ({
     id:          row.id,
@@ -211,7 +259,7 @@ export async function getStats(seasonId?: string): Promise<PokemonStats[]> {
     losses:      row.losses,
     kos:         row.kos,
     deaths:      row.deaths,
-    pokemon: row.pokemon ? mapPokemon(row.pokemon) : undefined,
+    pokemon: row.pokemon ? applyPoints(mapPokemon(row.pokemon), points) : undefined,
     team: row.team
       ? {
           id:       row.team.id,

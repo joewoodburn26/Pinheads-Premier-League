@@ -8,6 +8,8 @@ import type { Pokemon, PokemonType } from "@/lib/types";
 type SpeciesEntry = {
   n: string;
   num: number;
+  /** Generation it was introduced */
+  g: number;
   a: string[];
   /** National Dex learnset: "moveIndex.gen,…" */
   l: string;
@@ -139,12 +141,25 @@ export function moveOptions(format?: string): MoveOption[] {
 
 // ── Availability ─────────────────────────────────────────────────────────────
 
-/** In a Champions season only Pokémon that exist in Champions are options. */
+const GEN_LAST_DEX = [151, 251, 386, 493, 649, 721, 809, 905];
+
+/**
+ * Which Pokémon are options in a season:
+ *  - Champions: only Pokémon that are in Champions
+ *  - Gen 1–8: only Pokémon (and formes) that existed by that generation
+ *  - All / Gen 9: everything
+ */
 export function isAvailable(p: Pick<Pokemon, "name" | "dexNumber">, format?: string): boolean {
-  if (format !== "champs") return true;
-  return !!findSpecies(p)?.ch;
+  const mode = formatMode(format);
+  const species = findSpecies(p);
+  if (mode.kind === "champions") return !!species?.ch;
+  if (mode.maxGen >= 9) return true;
+  if (species) return species.g <= mode.maxGen;
+  return p.dexNumber <= (GEN_LAST_DEX[mode.maxGen - 1] ?? Infinity);
 }
 
 export function filterAvailable<T extends Pick<Pokemon, "name" | "dexNumber">>(list: T[], format?: string): T[] {
-  return format === "champs" ? list.filter((p) => isAvailable(p, format)) : list;
+  const mode = formatMode(format);
+  if (mode.kind === "natdex" && mode.maxGen >= 9) return list;
+  return list.filter((p) => isAvailable(p, format));
 }

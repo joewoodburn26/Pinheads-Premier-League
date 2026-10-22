@@ -6,6 +6,7 @@
 // Re-run it when new games/learnsets come out. For every species it stores:
 //   - abilities
 //   - every move it can learn, with the earliest generation (National Dex rules)
+//   - the generation it was introduced (for Gen 1–8 seasons)
 //   - its Pokémon Champions movepool and whether it's available in Champions
 
 import { writeFileSync } from "node:fs";
@@ -193,6 +194,19 @@ function inChampions(id) {
   return !!f && f.tier !== "Illegal" && !f.isNonstandard;
 }
 
+// ── Generation each species/forme first appeared in ───────────────────────────
+const GEN_LAST_DEX = [151, 251, 386, 493, 649, 721, 809, 905];
+function introGen(entry) {
+  if (typeof entry.gen === "number") return entry.gen;
+  const forme = String(entry.forme ?? "");
+  if (/Paldea/.test(forme)) return 9;
+  if (/Gmax|Galar|Hisui/.test(forme)) return 8;
+  if (/Alola|Totem/.test(forme)) return 7;
+  if (/Mega|Primal/.test(forme)) return 6;
+  const gen = GEN_LAST_DEX.findIndex((last) => entry.num <= last);
+  return gen === -1 ? 9 : gen + 1;
+}
+
 // ── Assemble ──────────────────────────────────────────────────────────────────
 const moveIndex = new Map();
 const moveList = [];
@@ -211,6 +225,7 @@ for (const [id, entry] of Object.entries(pokedex)) {
   const record = {
     n: entry.name,
     num: entry.num,
+    g: introGen(entry),
     a: [...new Set(Object.values(entry.abilities ?? {}))],
     // "moveIndex.gen,moveIndex.gen,…"
     l: Object.entries(natdex).map(([m, g]) => `${idx(m)}.${g}`).join(","),

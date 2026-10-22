@@ -79,21 +79,18 @@ export async function updatePokemonCost(pokemonId: string, pointValue: number, s
   if (!hasSupabaseEnv()) return;
   const supabase = createSupabaseAdminClient();
 
-  if (seasonId) {
-    // Write season-specific override
-    await supabase.from("season_point_values").upsert({
-      season_id: seasonId,
-      pokemon_id: pokemonId,
-      point_value: pointValue,
-    }, { onConflict: "season_id,pokemon_id" });
-  } else {
-    // Fall back to global update
-    await supabase.from("pokemon").update({ point_value: pointValue }).eq("id", pokemonId);
-  }
+  const { error } = seasonId
+    ? // Season-specific points
+      await supabase.from("season_point_values").upsert({
+        season_id: seasonId,
+        pokemon_id: pokemonId,
+        point_value: pointValue,
+      }, { onConflict: "season_id,pokemon_id" })
+    : // Base (Pokédex) points
+      await supabase.from("pokemon").update({ point_value: pointValue }).eq("id", pokemonId);
+  if (error) throw new Error(error.message);
 
-  revalidatePath("/draft");
-  revalidatePath("/rosters");
-  revalidatePath("/settings/point-restructure");
+  revalidatePath("/", "layout");
 }
 
 export async function updateTeamName(teamId: string, formData: FormData) {

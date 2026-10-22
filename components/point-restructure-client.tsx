@@ -129,12 +129,16 @@ export function PointRestructureClient({
   function handleSave() {
     const updates = Object.entries(edits);
     startTransition(async () => {
-      for (const [id, pointValue] of updates) {
-        await updatePokemonCost(id, pointValue, seasonId);
+      try {
+        for (const [id, pointValue] of updates) {
+          await updatePokemonCost(id, pointValue, seasonId);
+        }
+        setMessage(`✓ Saved ${updates.length} change${updates.length !== 1 ? "s" : ""} to ${currentSeason?.name}`);
+        setEdits({});
+      } catch {
+        setMessage("✗ Couldn't save the points. Make sure the season_point_values table exists (see supabase/season-points.sql).");
       }
-      setMessage(`✓ Saved ${updates.length} change${updates.length !== 1 ? "s" : ""} to ${currentSeason?.name}`);
-      setEdits({});
-      setTimeout(() => setMessage(""), 3000);
+      setTimeout(() => setMessage(""), 5000);
     });
   }
 
@@ -157,12 +161,20 @@ export function PointRestructureClient({
       const csvText = reader.result as string;
       startTransition(async () => {
         try {
-          await updatePointsFromCsv(csvText);
-          setCsvMsg(`✓ Updated Pokémon points from CSV`);
-        } catch (err) {
-          setCsvMsg(`✗ ${err instanceof Error ? err.message : "Upload failed"}`);
+          const result = await updatePointsFromCsv(csvText, seasonId);
+          if (result.error) {
+            setCsvMsg(`✗ ${result.error}`);
+          } else {
+            const missed = result.notFound?.length ?? 0;
+            setCsvMsg(
+              `✓ Updated ${result.updated ?? 0} Pokémon for ${currentSeason?.name ?? "this season"}` +
+                (missed ? ` · ${missed} name${missed === 1 ? "" : "s"} not found: ${result.notFound!.slice(0, 5).join(", ")}${missed > 5 ? "…" : ""}` : ""),
+            );
+          }
+        } catch {
+          setCsvMsg("✗ Upload failed. Try again.");
         }
-        setTimeout(() => setCsvMsg(""), 4000);
+        setTimeout(() => setCsvMsg(""), 8000);
       });
     };
     reader.readAsText(file);
