@@ -4,6 +4,8 @@ create table if not exists seasons (
   id text primary key default gen_random_uuid()::text,
   name text not null unique,
   draft_budget integer not null default 105,
+  roster_size integer,
+  format text not null default 'all',  -- all | gen9 | champs | gen1–gen8 (decides movepools; champs also limits Pokémon)
   active_season boolean not null default false,
   archived boolean not null default false,
   created_at timestamptz not null default now()
@@ -25,6 +27,10 @@ create table if not exists teams (
   wins integer not null default 0,
   losses integer not null default 0
 );
+
+-- Columns added after the first version (safe to re-run)
+alter table seasons add column if not exists format text not null default 'all';
+alter table seasons add column if not exists roster_size integer;
 
 -- Coach-chosen ace Pokémon (added later; safe to re-run)
 alter table teams add column if not exists ace_pokemon_id text references pokemon(id) on delete set null;

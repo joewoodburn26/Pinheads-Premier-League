@@ -150,7 +150,7 @@ function SeasonSettingsEditor({ season }: { season: Season }) {
         <div>
           <p className="text-sm font-semibold">Format / Generation</p>
           <p className="text-xs text-muted-foreground">
-            The Pokémon Showdown format this season uses. Shown as context for drafters — does not enforce legality automatically.
+            Decides which moves count in the Draft room search and on Prep. Pokémon Champions also limits the Draft room and roster picker to Pokémon that are in Champions.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
