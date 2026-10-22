@@ -39,8 +39,22 @@ const TYPE_COLORS: Record<string, string> = {
   Steel:"bg-gray-500",Fairy:"bg-pink-300",
 };
 
-type StageFilter = "any" | "final" | "stage1" | "stage2" | "nfe";
-// stage1 = base (no prevo), nfe = middle (has both prevo + evos), final = no evos
+type StageFilter = "any" | "final" | "nfe" | "base" | "middle";
+// final  = can't evolve further (includes Pokémon that never evolve)
+// nfe    = can still evolve
+// base   = first stage of a line that evolves (no prevo, has evos)
+// middle = evolved once and can evolve again (has prevo + evos)
+
+/** Highest National Dex number available in each generation. */
+const GEN_MAX_DEX: Record<string, number> = {
+  gen1: 151, gen2: 251, gen3: 386, gen4: 493, gen5: 649,
+  gen6: 721, gen7: 809, gen8: 905,
+};
+
+/** Evolution stages follow the selected generation; "all", gen9 and champs use the latest games. */
+function maxDexForFormat(format: string): number {
+  return GEN_MAX_DEX[format] ?? Infinity;
+}
 
 // ─── Showdown data fetchers ────────────────────────────────────────────────────
 
@@ -76,75 +90,128 @@ async function fetchLegalSet(url: string): Promise<Set<string>> {
   });
 }
 
-/**
- * Returns a map: lowercase name → { hasPrev: bool, hasEvos: bool }
- * so we can classify evolution stage client-side.
- */
-type EvoInfo = { hasPrev: boolean; hasEvos: boolean };
+/** One Showdown pokedex entry, reduced to what we need for evolution stages. */
+type EvoEntry = {
+  num: number;
+  isForme: boolean;      // alternate forme (regional, mega, etc.)
+  prevo: string | null;  // Showdown id of what it evolves from
+  evos: string[];        // Showdown ids of what it evolves into
+};
 
-async function fetchEvoMap(): Promise<Map<string, EvoInfo>> {
-  return cachedFetch("evomap", async () => {
+type EvoData = {
+  byId: Map<string, EvoEntry>;
+  baseIdByNum: Map<number, string>; // dex number → base-forme id (fallback lookup)
+};
+
+function toId(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+async function fetchEvoData(): Promise<EvoData> {
+  return cachedFetch("evodata", async () => {
     const url = "https://raw.githubusercontent.com/smogon/pokemon-showdown/master/data/pokedex.ts";
     const text = await fetchShowdown(url);
-    const map = new Map<string, EvoInfo>();
+    const byId = new Map<string, EvoEntry>();
+    const baseIdByNum = new Map<number, string>();
 
-    // Parse line-by-line. Each top-level entry looks like:
+    // Each top-level entry looks like:
     //   \tpokemonname: {
-    //     ...fields...
+    //     num: 25, ..., prevo: "Pichu", evos: ["Raichu", "Raichu-Alola"], ...
     //   },
-    // We track depth with a brace counter so we know when we exit an entry.
-    const lines = text.split("\n");
-    let currentName = "";
-    let depth = 0;
-    let hasPrev = false;
-    let hasEvos = false;
-
-    // Matches the start of a top-level entry: one tab + identifier + ": {"
+    // Track brace depth so we only read fields that belong to the entry itself.
     const entryStart = /^\t([a-z0-9]+)\s*:\s*\{/i;
+    let currentId = "";
+    let depth = 0;
+    let entry: EvoEntry = { num: 0, isForme: false, prevo: null, evos: [] };
 
-    for (const line of lines) {
+    const finish = () => {
+      if (!currentId) return;
+      byId.set(currentId, entry);
+      if (!entry.isForme && entry.num > 0 && !baseIdByNum.has(entry.num)) {
+        baseIdByNum.set(entry.num, currentId);
+      }
+      currentId = "";
+    };
+
+    for (const line of text.split("\n")) {
       if (depth === 0) {
         const m = entryStart.exec(line);
-        if (m) {
-          currentName = m[1].toLowerCase();
-          hasPrev = false;
-          hasEvos = false;
-          depth = 1;
-          // count any additional open/close braces on this same line
-          for (let i = line.indexOf("{") + 1; i < line.length; i++) {
-            if (line[i] === "{") depth++;
-            else if (line[i] === "}") { depth--; if (depth === 0) break; }
-          }
-          if (depth === 0 && currentName) {
-            map.set(currentName, { hasPrev, hasEvos });
-            currentName = "";
-          }
+        if (!m) continue;
+        currentId = m[1].toLowerCase();
+        entry = { num: 0, isForme: false, prevo: null, evos: [] };
+        depth = 1;
+        for (let i = line.indexOf("{") + 1; i < line.length; i++) {
+          if (line[i] === "{") depth++;
+          else if (line[i] === "}") { depth--; if (depth === 0) { finish(); break; } }
         }
-      } else {
-        // Inside an entry — scan for prevo / evos fields
-        if (/\bprevo\s*:/.test(line)) hasPrev = true;
-        if (/\bevos\s*:/.test(line)) hasEvos = true;
-        // Track brace depth
-        for (const ch of line) {
-          if (ch === "{") depth++;
-          else if (ch === "}") {
-            depth--;
-            if (depth === 0) {
-              if (currentName) map.set(currentName, { hasPrev, hasEvos });
-              currentName = "";
-              break;
-            }
-          }
+        continue;
+      }
+
+      if (depth === 1) {
+        const num = /^\s*num\s*:\s*(-?\d+)/.exec(line);
+        if (num) entry.num = Number(num[1]);
+        if (/^\s*forme\s*:/.test(line)) entry.isForme = true;
+        const prevo = /^\s*prevo\s*:\s*["']([^"']+)["']/.exec(line);
+        if (prevo) entry.prevo = toId(prevo[1]);
+        const evos = /^\s*evos\s*:\s*\[([^\]]*)\]/.exec(line);
+        if (evos) {
+          entry.evos = Array.from(evos[1].matchAll(/["']([^"']+)["']/g), (x) => toId(x[1]));
+        }
+      }
+
+      for (const ch of line) {
+        if (ch === "{") depth++;
+        else if (ch === "}") {
+          depth--;
+          if (depth === 0) { finish(); break; }
         }
       }
     }
 
-    return map;
+    return { byId, baseIdByNum };
   });
 }
 
+const REGION_PREFIXES: [RegExp, string][] = [
+  [/\balolan\b/i,   "alola"],
+  [/\bgalarian\b/i, "galar"],
+  [/\bhisuian\b/i,  "hisui"],
+  [/\bpaldean\b/i,  "paldea"],
+];
+
+/** Find the Showdown entry for one of our Pokémon (name → regional rewrite → dex number). */
+function findEvoEntry(p: Pokemon, data: EvoData): EvoEntry | undefined {
+  const direct = data.byId.get(toId(p.name));
+  if (direct) return direct;
+
+  // "Galarian Corsola" / "Corsola (Galarian Form)" → "corsolagalar"
+  for (const [re, suffix] of REGION_PREFIXES) {
+    if (re.test(p.name)) {
+      const base = toId(p.name.replace(re, "").replace(/\bform\b/i, ""));
+      const regional = data.byId.get(base + suffix);
+      if (regional) return regional;
+    }
+  }
+
+  // Fall back to the base species by dex number
+  const baseId = data.baseIdByNum.get(p.dexNumber);
+  return baseId ? data.byId.get(baseId) : undefined;
+}
+
+/** Does this Pokémon still evolve / have a pre-evolution, counting only Pokémon that exist by maxDex? */
+function evoInfo(entry: EvoEntry, data: EvoData, maxDex: number) {
+  const exists = (id: string) => {
+    const e = data.byId.get(id);
+    return !e || e.num <= maxDex; // unknown id → assume it exists
+  };
+  return {
+    hasPrev: entry.prevo !== null && exists(entry.prevo),
+    hasEvos: entry.evos.some(exists),
+  };
+}
+
 function normalizeForShowdown(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return toId(name);
 }
 
 // ─── Result Card ──────────────────────────────────────────────────────────────
@@ -247,8 +314,8 @@ export function RandomizerClient({ allPokemon }: { allPokemon: Pokemon[] }) {
         if (fmt?.url) legalSet = await fetchLegalSet(fmt.url);
 
         // 2. Evo stage (fetch only if needed)
-        let evoMap: Map<string, EvoInfo> | null = null;
-        if (stageFilter !== "any") evoMap = await fetchEvoMap();
+        let evoData: EvoData | null = null;
+        if (stageFilter !== "any") evoData = await fetchEvoData();
 
         // 3. Base pool — apply draft legality filter
         let pool: Pokemon[];
@@ -285,18 +352,19 @@ export function RandomizerClient({ allPokemon }: { allPokemon: Pokemon[] }) {
         if (legalSet) pool = pool.filter(p => legalSet!.has(normalizeForShowdown(p.name)));
 
         // 9. Evo stage filter
-        if (stageFilter !== "any" && evoMap) {
+        if (stageFilter !== "any" && evoData) {
+          const maxDex = maxDexForFormat(formatValue);
           pool = pool.filter(p => {
-            const key = normalizeForShowdown(p.name);
-            const info = evoMap!.get(key);
-            if (!info) return stageFilter === "final"; // unknown = assume final
-            const { hasPrev, hasEvos } = info;
+            const entry = findEvoEntry(p, evoData!);
+            // Unmatched names stay in the pool and are treated as fully evolved
+            if (!entry) return stageFilter === "final";
+            const { hasPrev, hasEvos } = evoInfo(entry, evoData!, maxDex);
             switch (stageFilter) {
               case "final":  return !hasEvos;
-              case "stage1": return !hasPrev;            // no prevo = base stage
-              case "stage2": return hasPrev && !hasEvos; // middle of 3-stage, OR final of 2-stage treated via nfe
-              case "nfe":    return hasEvos;             // has evos = not fully evolved
-              default: return true;
+              case "nfe":    return hasEvos;
+              case "base":   return !hasPrev && hasEvos;
+              case "middle": return hasPrev && hasEvos;
+              default:       return true;
             }
           });
         }
@@ -377,11 +445,11 @@ export function RandomizerClient({ allPokemon }: { allPokemon: Pokemon[] }) {
             <label className="block text-xs font-medium text-muted-foreground mb-2">Evolution Stage</label>
             <div className="flex flex-wrap gap-2">
               {([
-                ["Any",        "any"],
-                ["Fully Evolved", "final"],
-                ["Base Stage", "stage1"],
-                ["Middle Stage", "stage2"],
+                ["Any",               "any"],
+                ["Fully Evolved",     "final"],
                 ["Not Fully Evolved", "nfe"],
+                ["Base Stage",        "base"],
+                ["Middle Stage",      "middle"],
               ] as [string, StageFilter][]).map(([label, val]) => (
                 <button
                   key={val}
