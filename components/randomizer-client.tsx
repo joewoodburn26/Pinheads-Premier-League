@@ -262,6 +262,7 @@ export function RandomizerClient({ allPokemon }: { allPokemon: Pokemon[] }) {
   const [minBst, setMinBst]             = useState<number | "">(200);
   const [maxBst, setMaxBst]             = useState<number | "">(700);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [typeCount, setTypeCount]       = useState<"any" | "single" | "dual">("any");
   const [allowLegendary, setAllowLegendary] = useState(false);
   const [allowMythical,  setAllowMythical]  = useState(false);
   const [allowParadox,   setAllowParadox]   = useState(false);
@@ -343,6 +344,10 @@ export function RandomizerClient({ allPokemon }: { allPokemon: Pokemon[] }) {
           );
         }
 
+        // 6b. Type count (independent of the type filter above)
+        if (typeCount === "single") pool = pool.filter(p => !p.secondaryType);
+        if (typeCount === "dual")   pool = pool.filter(p => Boolean(p.secondaryType));
+
         // 7. Category
         if (!allowLegendary) pool = pool.filter(p => !p.legendary);
         if (!allowMythical)  pool = pool.filter(p => !p.mythical);
@@ -412,7 +417,7 @@ export function RandomizerClient({ allPokemon }: { allPokemon: Pokemon[] }) {
         setError(e instanceof Error ? e.message : "Something went wrong");
       }
     });
-  }, [allPokemon, count, minPts, maxPts, minBst, maxBst, selectedTypes,
+  }, [allPokemon, count, minPts, maxPts, minBst, maxBst, selectedTypes, typeCount,
       allowLegendary, allowMythical, allowParadox, formatValue, budgetCap,
       stageFilter, draftLegality, results, lockedIds]);
 
@@ -525,6 +530,26 @@ export function RandomizerClient({ allPokemon }: { allPokemon: Pokemon[] }) {
                 className={`rounded px-2.5 py-1 text-xs font-semibold uppercase transition-opacity ${TYPE_COLORS[t] ?? "bg-gray-500"} text-white ${selectedTypes.includes(t) ? "opacity-100 ring-2 ring-white" : "opacity-40 hover:opacity-70"}`}
               >
                 {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Row 5b: Type count */}
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-2">Type Count</label>
+          <div className="flex flex-wrap gap-2">
+            {([
+              ["Any",         "any"],
+              ["Single Type", "single"],
+              ["Dual Type",   "dual"],
+            ] as [string, "any" | "single" | "dual"][]).map(([label, val]) => (
+              <button
+                key={val}
+                onClick={() => setTypeCount(val)}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${typeCount === val ? "bg-blue-600 border-blue-600 text-white" : "bg-background border-border text-muted-foreground hover:text-foreground"}`}
+              >
+                {label}
               </button>
             ))}
           </div>
