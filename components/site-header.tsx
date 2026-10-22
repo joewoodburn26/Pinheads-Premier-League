@@ -81,6 +81,11 @@ export function SiteHeader({
               {label}
             </Link>
           ))}
+          {user && (
+            <Link href="/prep" className="rounded-md px-3 py-2 hover:bg-muted">
+              Prep
+            </Link>
+          )}
 
           {/* Account */}
           {user ? (

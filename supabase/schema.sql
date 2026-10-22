@@ -130,3 +130,14 @@ create table if not exists draft_plans (
 );
 create index if not exists draft_plans_team_idx on draft_plans(team_id);
 alter table draft_plans enable row level security;
+
+-- Prep tab: private matchup notes (see supabase/prep.sql)
+create table if not exists matchup_notes (
+  team_id text not null references teams(id) on delete cascade,
+  opponent_team_id text not null references teams(id) on delete cascade,
+  notes text not null default '',
+  updated_by uuid references profiles(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  primary key (team_id, opponent_team_id)
+);
+alter table matchup_notes enable row level security;
