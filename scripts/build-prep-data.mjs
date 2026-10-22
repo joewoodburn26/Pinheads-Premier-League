@@ -12,16 +12,17 @@ import { dirname, join } from "node:path";
 const BASE = "https://raw.githubusercontent.com/smogon/pokemon-showdown/master/data";
 
 // ── Prep categories (from the Pinheads teambuilder sheet, plus Recovery) ──────
+// Each move is [name, type]; the type sets the move's color on the Prep tab.
 const CATEGORIES = [
-  { key: "hazards", label: "Hazard Setting", moves: ["Stealth Rock", "Spikes", "Toxic Spikes", "Sticky Web", "Ceaseless Edge", "Stone Axe"] },
-  { key: "removal", label: "Hazard Removal", moves: ["Defog", "Rapid Spin", "Court Change", "Mortal Spin", "Tidy Up"] },
-  { key: "recovery", label: "Recovery", moves: ["Recover", "Roost", "Slack Off", "Soft-Boiled", "Milk Drink", "Synthesis", "Morning Sun", "Moonlight", "Shore Up", "Heal Order", "Strength Sap", "Rest", "Pain Split"] },
-  { key: "healing", label: "Healing (team support)", moves: ["Wish", "Heal Bell", "Aromatherapy", "Healing Wish", "Lunar Dance", "Jungle Healing", "Lunar Blessing", "Refresh", "Revival Blessing", "Take Heart"] },
-  { key: "momentum", label: "Momentum", moves: ["U-turn", "Volt Switch", "Flip Turn", "Parting Shot", "Teleport", "Shed Tail", "Chilly Reception", "Baton Pass", "Memento"] },
-  { key: "itemRemoval", label: "Item Removal", moves: ["Knock Off", "Trick", "Switcheroo", "Corrosive Gas"] },
-  { key: "status", label: "Status", moves: ["Thunder Wave", "Will-O-Wisp", "Toxic", "Spore", "Glare", "Nuzzle", "Yawn"] },
-  { key: "priority", label: "Priority", moves: ["Fake Out", "Extreme Speed", "Sucker Punch", "Aqua Jet", "Bullet Punch", "Ice Shard", "Mach Punch", "Shadow Sneak", "Quick Attack", "Accelerock", "First Impression", "Jet Punch", "Thunderclap", "Upper Hand", "Vacuum Wave", "Water Shuriken"] },
-  { key: "disruption", label: "Disruption", moves: ["Roar", "Whirlwind", "Dragon Tail", "Circle Throw", "Haze", "Clear Smog", "Encore", "Taunt"] },
+  { key: "hazards", label: "Hazard Setting", moves: [["Stealth Rock", "Rock"], ["Spikes", "Ground"], ["Toxic Spikes", "Poison"], ["Sticky Web", "Bug"], ["Ceaseless Edge", "Dark"], ["Stone Axe", "Rock"]] },
+  { key: "removal", label: "Hazard Removal", moves: [["Defog", "Flying"], ["Rapid Spin", "Normal"], ["Court Change", "Normal"], ["Mortal Spin", "Poison"], ["Tidy Up", "Normal"]] },
+  { key: "recovery", label: "Recovery", moves: [["Recover", "Normal"], ["Roost", "Flying"], ["Slack Off", "Normal"], ["Soft-Boiled", "Normal"], ["Milk Drink", "Normal"], ["Synthesis", "Grass"], ["Morning Sun", "Normal"], ["Moonlight", "Fairy"], ["Shore Up", "Ground"], ["Heal Order", "Bug"], ["Strength Sap", "Grass"], ["Rest", "Psychic"], ["Pain Split", "Normal"]] },
+  { key: "healing", label: "Healing (team support)", moves: [["Wish", "Normal"], ["Heal Bell", "Normal"], ["Aromatherapy", "Grass"], ["Healing Wish", "Psychic"], ["Lunar Dance", "Psychic"], ["Jungle Healing", "Grass"], ["Lunar Blessing", "Psychic"], ["Refresh", "Normal"], ["Revival Blessing", "Normal"], ["Take Heart", "Psychic"]] },
+  { key: "momentum", label: "Momentum", moves: [["U-turn", "Bug"], ["Volt Switch", "Electric"], ["Flip Turn", "Water"], ["Parting Shot", "Dark"], ["Teleport", "Psychic"], ["Shed Tail", "Normal"], ["Chilly Reception", "Ice"], ["Baton Pass", "Normal"], ["Memento", "Dark"]] },
+  { key: "itemRemoval", label: "Item Removal", moves: [["Knock Off", "Dark"], ["Trick", "Psychic"], ["Switcheroo", "Dark"], ["Corrosive Gas", "Poison"]] },
+  { key: "status", label: "Status", moves: [["Thunder Wave", "Electric"], ["Will-O-Wisp", "Fire"], ["Toxic", "Poison"], ["Spore", "Grass"], ["Glare", "Normal"], ["Nuzzle", "Electric"], ["Yawn", "Normal"]] },
+  { key: "priority", label: "Priority", moves: [["Fake Out", "Normal"], ["Extreme Speed", "Normal"], ["Sucker Punch", "Dark"], ["Aqua Jet", "Water"], ["Bullet Punch", "Steel"], ["Ice Shard", "Ice"], ["Mach Punch", "Fighting"], ["Shadow Sneak", "Ghost"], ["Quick Attack", "Normal"], ["Accelerock", "Rock"], ["First Impression", "Bug"], ["Jet Punch", "Water"], ["Thunderclap", "Electric"], ["Upper Hand", "Fighting"], ["Vacuum Wave", "Fighting"], ["Water Shuriken", "Water"]] },
+  { key: "disruption", label: "Disruption", moves: [["Roar", "Normal"], ["Whirlwind", "Normal"], ["Dragon Tail", "Dragon"], ["Circle Throw", "Fighting"], ["Haze", "Ice"], ["Clear Smog", "Poison"], ["Encore", "Normal"], ["Taunt", "Dark"]] },
 ];
 
 const toId = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -108,7 +109,7 @@ async function load(name) {
 
 const [pokedex, learnsets] = await Promise.all([load("pokedex.ts"), load("learnsets.ts")]);
 
-const wanted = new Set(CATEGORIES.flatMap((c) => c.moves.map(toId)));
+const wanted = new Set(CATEGORIES.flatMap((c) => c.moves.map(([name]) => toId(name))));
 
 // Earliest generation each species can learn each wanted move, following
 // forme bases and pre-evolutions (egg/tutor moves live on the earliest stage).
@@ -157,7 +158,7 @@ for (const [id, entry] of Object.entries(pokedex)) {
 const out = {
   generatedAt: new Date().toISOString(),
   source: "Pokémon Showdown data (smogon/pokemon-showdown)",
-  categories: CATEGORIES.map((c) => ({ ...c, moves: c.moves.map((name) => ({ id: toId(name), name })) })),
+  categories: CATEGORIES.map((c) => ({ ...c, moves: c.moves.map(([name, type]) => ({ id: toId(name), name, type })) })),
   species,
 };
 

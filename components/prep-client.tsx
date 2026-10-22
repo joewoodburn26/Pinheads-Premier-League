@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { TypeBadge } from "@/components/type-badge";
 import { pokemonTypes, typeColors } from "@/lib/type-chart";
 import { saveMatchupNotes } from "@/lib/prep-actions";
-import type { PrepMember, PrepTeam, TypeSummaryRow } from "@/lib/prep";
+import type { PrepMember, PrepTeam } from "@/lib/prep";
 import type { PokemonType } from "@/lib/types";
 
 type TeamOption = { id: string; teamName: string; coachName: string };
@@ -18,15 +18,17 @@ type Category = { key: string; label: string };
 const YOU = { color: "#3b82f6", label: "You" };
 const OPP = { color: "#ef4444", label: "Opponent" };
 
-const TYPE_ABBR: Record<PokemonType, string> = {
-  Normal: "Nor", Fire: "Fir", Water: "Wat", Electric: "Ele", Grass: "Gra", Ice: "Ice",
-  Fighting: "Fig", Poison: "Poi", Ground: "Gro", Flying: "Fly", Psychic: "Psy", Bug: "Bug",
-  Rock: "Roc", Ghost: "Gho", Dragon: "Dra", Dark: "Dar", Steel: "Ste", Fairy: "Fai",
-};
+// Light type colors need dark text to stay readable
+const DARK_TEXT_TYPES = new Set<PokemonType>(["Electric", "Ice", "Normal", "Ground", "Steel", "Fairy", "Flying", "Grass", "Bug", "Rock"]);
+
+function speedAt(base: number, level: 50 | 100, ev: 0 | 252, plusNature = false) {
+  // 31 IVs
+  const stat = Math.floor(((2 * base + 31 + Math.floor(ev / 4)) * level) / 100) + 5;
+  return plusNature ? Math.floor(stat * 1.1) : stat;
+}
 
 const SECTIONS = [
   ["rosters", "Rosters"],
-  ["types", "Type Matchups"],
   ["grid", "Weakness Grid"],
   ["speed", "Speed Tiers"],
   ["moves", "Moves"],
@@ -46,8 +48,8 @@ export function PrepClient({
   teams: TeamOption[];
   yourTeamId: string;
   vsTeamId: string;
-  you: PrepTeam;
-  opp: PrepTeam;
+  you: PrepTeam | null;
+  opp: PrepTeam | null;
   categories: Category[];
   formatLabel: string;
   notes: { canEdit: boolean; text: string; updatedLabel: string | null };
@@ -58,10 +60,14 @@ export function PrepClient({
   const oppName = teams.find((t) => t.id === vsTeamId)?.teamName ?? "Opponent";
 
   function go(team: string, vs: string) {
-    startNav(() => router.push(`/prep?team=${team}&vs=${vs}`));
+    const q = new URLSearchParams();
+    if (team) q.set("team", team);
+    if (vs) q.set("vs", vs);
+    startNav(() => router.push(`/prep${q.size ? `?${q}` : ""}`));
   }
 
-  const unmatched = [...you.unmatched, ...opp.unmatched];
+  const ready = !!you && !!opp;
+  const unmatched = ready ? [...you.unmatched, ...opp.unmatched] : [];
 
   return (
     <div className={`space-y-8 ${navigating ? "opacity-60" : ""} transition-opacity`}>
@@ -77,6 +83,7 @@ export function PrepClient({
           <TeamPicker label="Your team" color={YOU.color} value={yourTeamId} teams={teams} exclude={vsTeamId} onChange={(id) => go(id, vsTeamId)} />
           <button
             onClick={() => go(vsTeamId, yourTeamId)}
+            disabled={!yourTeamId && !vsTeamId}
             title="Swap teams"
             aria-label="Swap teams"
             className="mx-auto mb-1 rounded-full border bg-background p-2.5 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -85,13 +92,13 @@ export function PrepClient({
           </button>
           <TeamPicker label="Opponent" color={OPP.color} value={vsTeamId} teams={teams} exclude={yourTeamId} onChange={(id) => go(yourTeamId, id)} />
         </div>
-        <nav className="mt-5 flex flex-wrap gap-1.5">
+        {ready && <nav className="mt-5 flex flex-wrap gap-1.5">
           {SECTIONS.map(([id, label]) => (
             <a key={id} href={`#${id}`} className="rounded-full border bg-background/60 px-3 py-1 text-xs hover:bg-muted">
               {label}
             </a>
           ))}
-        </nav>
+        </nav>}
         {unmatched.length > 0 && (
           <p className="mt-3 text-xs text-yellow-400">
             No move/ability data found for: {unmatched.join(", ")}. Tell Claude these names so they can be matched.
@@ -99,6 +106,14 @@ export function PrepClient({
         )}
       </section>
 
+      {!you || !opp ? (
+        <Card className="flex flex-col items-center gap-2 p-12 text-center">
+          <Swords size={36} className="text-muted-foreground/50" />
+          <p className="text-lg font-bold">Pick both teams to start</p>
+          <p className="text-sm text-muted-foreground">Choose your team and an opponent above to load the matchup.</p>
+        </Card>
+      ) : (
+      <>
       {/* ── Rosters ──────────────────────────────────────────────────── */}
       <Section id="rosters" title="Rosters">
         <div className="grid gap-4 xl:grid-cols-2">
@@ -107,20 +122,8 @@ export function PrepClient({
         </div>
       </Section>
 
-      {/* ── Type matchup summary ─────────────────────────────────────── */}
-      <Section
-        id="types"
-        title="Type Matchups"
-        hint="For each attacking type: how many of the team have it as STAB, are immune, resist it (¼× / ½×) or are weak to it (2× / 4×)."
-      >
-        <div className="grid gap-4 xl:grid-cols-2">
-          <SummaryTable name={yourName} side={YOU} rows={you.summary} />
-          <SummaryTable name={oppName} side={OPP} rows={opp.summary} />
-        </div>
-      </Section>
-
       {/* ── Weakness grid ────────────────────────────────────────────── */}
-      <Section id="grid" title="Weakness Grid" hint="Damage each Pokémon takes from each attacking type (abilities like Levitate aren't counted).">
+      <Section id="grid" title="Weakness Grid" hint="Damage each Pokémon takes from each attacking type. Green = weak, red = resists, gray = immune (abilities like Levitate aren't counted).">
         <div className="grid gap-4">
           <WeaknessGrid name={yourName} side={YOU} members={you.members} />
           <WeaknessGrid name={oppName} side={OPP} members={opp.members} />
@@ -128,13 +131,11 @@ export function PrepClient({
       </Section>
 
       {/* ── Speed tiers ──────────────────────────────────────────────── */}
-      <Section id="speed" title="Speed Tiers" hint="Level 100, 31 IVs. Sorted by max speed (252 EVs, + nature).">
-        <SpeedTable you={you.members} opp={opp.members} />
-      </Section>
+      <SpeedSection you={you.members} opp={opp.members} />
 
       {/* ── Moves ────────────────────────────────────────────────────── */}
       <Section id="moves" title="Moves" hint="Who can learn each utility move in this format.">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-2">
           {categories.map((cat) => (
             <MoveCategoryCard key={cat.key} label={cat.label} you={you} opp={opp} catKey={cat.key} />
           ))}
@@ -145,6 +146,8 @@ export function PrepClient({
       <Section id="notes" title="Matchup Notes">
         <NotesCard key={`${yourTeamId}|${vsTeamId}`} teamId={yourTeamId} vsId={vsTeamId} oppName={oppName} notes={notes} />
       </Section>
+      </>
+      )}
     </div>
   );
 }
@@ -179,6 +182,7 @@ function TeamPicker({
         className="w-full rounded-md border-2 bg-background px-3 py-2.5 text-base font-bold"
         style={{ borderColor: `${color}66` }}
       >
+        <option value="" disabled>Select a team…</option>
         {teams.map((t) => (
           <option key={t.id} value={t.id} disabled={t.id === exclude}>
             {t.teamName}{t.coachName ? ` (${t.coachName})` : ""}
@@ -247,68 +251,23 @@ function RosterTable({ name, side, members }: { name: string; side: typeof YOU; 
   );
 }
 
-function countCell(n: number, tone: "good" | "bad" | "plain", strongAt = 3) {
-  if (n === 0) return <span className="text-muted-foreground/30">·</span>;
-  const cls =
-    tone === "bad" ? (n >= strongAt ? "bg-red-500/30 text-red-300 font-black" : "bg-red-500/10 text-red-300")
-    : tone === "good" ? (n >= strongAt ? "bg-green-500/30 text-green-300 font-black" : "bg-green-500/10 text-green-300")
-    : "bg-white/5 text-foreground";
-  return <span className={`inline-block min-w-7 rounded px-1.5 py-0.5 text-center tabular-nums ${cls}`}>{n}</span>;
-}
-
-function SummaryTable({ name, side, rows }: { name: string; side: typeof YOU; rows: TypeSummaryRow[] }) {
-  return (
-    <Card className="overflow-hidden">
-      <SideTitle name={name} side={side} />
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            <tr className="border-b border-white/5">
-              <th className="px-3 py-2 text-left">Attacking type</th>
-              <th className="px-2 py-2">STAB</th>
-              <th className="px-2 py-2">0×</th>
-              <th className="px-2 py-2">¼×</th>
-              <th className="px-2 py-2">½×</th>
-              <th className="px-2 py-2">2×</th>
-              <th className="px-2 py-2">4×</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const weak = r.double + r.quad;
-              const safe = r.immune + r.quarter + r.half;
-              return (
-                <tr key={r.type} className={`border-b border-white/5 last:border-0 ${weak >= 3 && weak > safe ? "bg-red-500/[0.06]" : ""}`}>
-                  <td className="px-3 py-1"><TypeBadge type={r.type} /></td>
-                  <td className="px-2 py-1 text-center">{countCell(r.stab, "plain")}</td>
-                  <td className="px-2 py-1 text-center">{countCell(r.immune, "good", 2)}</td>
-                  <td className="px-2 py-1 text-center">{countCell(r.quarter, "good", 2)}</td>
-                  <td className="px-2 py-1 text-center">{countCell(r.half, "good")}</td>
-                  <td className="px-2 py-1 text-center">{countCell(r.double, "bad")}</td>
-                  <td className="px-2 py-1 text-center">{countCell(r.quad, "bad", 1)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
-}
+// Colors match the usual type-defense charts: green = weak (good to hit), red = resists
+const MULT_STYLE: Record<string, { label: string; bg: string; fg: string }> = {
+  "0":    { label: "0", bg: "#2e3436", fg: "#d1d5db" },
+  "0.25": { label: "¼", bg: "#6b0000", fg: "#ffffff" },
+  "0.5":  { label: "½", bg: "#a40000", fg: "#ffffff" },
+  "2":    { label: "2", bg: "#4e9a06", fg: "#ffffff" },
+  "4":    { label: "4", bg: "#2b5a02", fg: "#ffffff" },
+};
 
 function multCell(x: number) {
-  const map: Record<string, [string, string]> = {
-    "0": ["0", "bg-zinc-950 text-zinc-400"],
-    "0.25": ["¼", "bg-green-600/60 text-white font-bold"],
-    "0.5": ["½", "bg-green-600/25 text-green-200"],
-    "2": ["2", "bg-orange-500/40 text-orange-100 font-bold"],
-    "4": ["4", "bg-red-600/70 text-white font-black"],
-  };
-  const hit = map[String(x)];
+  const hit = MULT_STYLE[String(x)];
   if (!hit) return <td className="px-0.5 py-0.5"><div className="h-7" /></td>;
   return (
     <td className="px-0.5 py-0.5">
-      <div className={`grid h-7 place-items-center rounded text-xs ${hit[1]}`}>{hit[0]}</div>
+      <div className="grid h-7 place-items-center rounded text-xs font-bold" style={{ background: hit.bg, color: hit.fg }}>
+        {hit.label}
+      </div>
     </td>
   );
 }
@@ -318,14 +277,18 @@ function WeaknessGrid({ name, side, members }: { name: string; side: typeof YOU;
     <Card className="overflow-hidden">
       <SideTitle name={name} side={side} />
       <div className="overflow-x-auto p-2">
-        <table className="w-full min-w-[820px] text-sm">
+        <table className="w-full min-w-[1280px] table-fixed text-sm">
+          <colgroup>
+            <col className="w-[170px]" />
+            {pokemonTypes.map((t) => <col key={t} />)}
+          </colgroup>
           <thead>
             <tr>
               <th className="px-2 py-1 text-left text-[11px] uppercase tracking-wider text-muted-foreground">Pokémon</th>
               {pokemonTypes.map((t) => (
                 <th key={t} className="px-0.5 py-1">
-                  <span className="block rounded px-1 py-0.5 text-[10px] font-bold text-white" style={{ background: typeColors[t] }}>
-                    {TYPE_ABBR[t]}
+                  <span className="block rounded px-1 py-0.5 text-[10px] font-bold uppercase text-white" style={{ background: typeColors[t] }}>
+                    {t}
                   </span>
                 </th>
               ))}
@@ -337,7 +300,7 @@ function WeaknessGrid({ name, side, members }: { name: string; side: typeof YOU;
                 <td className="px-2 py-0.5">
                   <div className="flex items-center gap-1.5">
                     <Image src={m.pokemon.spriteUrl} alt="" width={28} height={28} className="size-6 object-contain" />
-                    <span className="whitespace-nowrap text-xs font-semibold">{m.pokemon.name}</span>
+                    <span className="truncate text-xs font-semibold">{m.pokemon.name}</span>
                   </div>
                 </td>
                 {pokemonTypes.map((t) => <MultCellWrap key={t} x={m.weakness[t]} />)}
@@ -354,50 +317,76 @@ function MultCellWrap({ x }: { x: number }) {
   return multCell(x);
 }
 
-function SpeedTable({ you, opp }: { you: PrepMember[]; opp: PrepMember[] }) {
+function SpeedSection({ you, opp }: { you: PrepMember[]; opp: PrepMember[] }) {
+  const [level, setLevel] = useState<50 | 100>(100);
   const rows = useMemo(
     () =>
-      [...you.map((m) => ({ m, side: YOU })), ...opp.map((m) => ({ m, side: OPP }))].sort(
-        (a, b) => b.m.speed.plus252 - a.m.speed.plus252 || b.m.speed.base - a.m.speed.base,
-      ),
-    [you, opp],
+      [...you.map((m) => ({ m, side: YOU })), ...opp.map((m) => ({ m, side: OPP }))]
+        .map((r) => ({
+          ...r,
+          s0: speedAt(r.m.pokemon.speed, level, 0),
+          s252: speedAt(r.m.pokemon.speed, level, 252),
+          sPlus: speedAt(r.m.pokemon.speed, level, 252, true),
+        }))
+        .sort((a, b) => b.sPlus - a.sPlus || b.m.pokemon.speed - a.m.pokemon.speed),
+    [you, opp, level],
   );
+
   return (
-    <Card className="overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            <tr className="border-b border-white/5">
-              <th className="px-3 py-2 text-left">#</th>
-              <th className="px-3 py-2 text-left">Pokémon</th>
-              <th className="px-3 py-2">Base</th>
-              <th className="px-3 py-2">0 EVs</th>
-              <th className="px-3 py-2">252 EVs</th>
-              <th className="px-3 py-2">252+</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(({ m, side }, i) => (
-              <tr key={`${side.label}-${m.pokemon.id}`} className="border-b border-white/5 last:border-0" style={{ background: `${side.color}0d` }}>
-                <td className="px-3 py-1.5 text-xs text-muted-foreground tabular-nums">{i + 1}</td>
-                <td className="px-3 py-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="h-6 w-1 rounded-full" style={{ background: side.color }} />
-                    <Image src={m.pokemon.spriteUrl} alt="" width={32} height={32} className="size-7 object-contain" />
-                    <span className="font-semibold">{m.pokemon.name}</span>
-                    <span className="text-[10px] font-bold uppercase" style={{ color: side.color }}>{side.label}</span>
-                  </div>
-                </td>
-                <td className="px-3 py-1.5 text-center tabular-nums">{m.speed.base}</td>
-                <td className="px-3 py-1.5 text-center tabular-nums text-muted-foreground">{m.speed.neutral0}</td>
-                <td className="px-3 py-1.5 text-center tabular-nums">{m.speed.max252}</td>
-                <td className="px-3 py-1.5 text-center font-bold tabular-nums">{m.speed.plus252}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <section id="speed" className="scroll-mt-24 space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-black">Speed Tiers</h2>
+          <p className="text-sm text-muted-foreground">Level {level}, 31 IVs. Sorted by max speed (252 EVs, + nature).</p>
+        </div>
+        <div className="flex rounded-md border p-0.5 text-sm">
+          {([100, 50] as const).map((l) => (
+            <button
+              key={l}
+              onClick={() => setLevel(l)}
+              className={`rounded px-3 py-1 font-semibold transition-colors ${level === l ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Level {l}
+            </button>
+          ))}
+        </div>
       </div>
-    </Card>
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              <tr className="border-b border-white/5">
+                <th className="px-3 py-2 text-left">#</th>
+                <th className="px-3 py-2 text-left">Pokémon</th>
+                <th className="px-3 py-2">Base</th>
+                <th className="px-3 py-2">0 EVs</th>
+                <th className="px-3 py-2">252 EVs</th>
+                <th className="px-3 py-2">252+</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ m, side, s0, s252, sPlus }, i) => (
+                <tr key={`${side.label}-${m.pokemon.id}`} className="border-b border-white/5 last:border-0" style={{ background: `${side.color}0d` }}>
+                  <td className="px-3 py-1.5 text-xs text-muted-foreground tabular-nums">{i + 1}</td>
+                  <td className="px-3 py-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="h-6 w-1 rounded-full" style={{ background: side.color }} />
+                      <Image src={m.pokemon.spriteUrl} alt="" width={32} height={32} className="size-7 object-contain" />
+                      <span className="font-semibold">{m.pokemon.name}</span>
+                      <span className="text-[10px] font-bold uppercase" style={{ color: side.color }}>{side.label}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-1.5 text-center tabular-nums">{m.pokemon.speed}</td>
+                  <td className="px-3 py-1.5 text-center tabular-nums text-muted-foreground">{s0}</td>
+                  <td className="px-3 py-1.5 text-center tabular-nums">{s252}</td>
+                  <td className="px-3 py-1.5 text-center font-bold tabular-nums">{sPlus}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </section>
   );
 }
 
@@ -426,7 +415,16 @@ function MoveCategoryCard({ label, you, opp, catKey }: { label: string; you: Pre
               ) : (
                 rows.map((r) => (
                   <div key={r.move}>
-                    <p className="text-xs font-semibold">{r.move}</p>
+                    <span
+                      className="inline-block rounded px-2 py-0.5 text-xs font-bold"
+                      style={{
+                        background: typeColors[r.type],
+                        color: DARK_TEXT_TYPES.has(r.type) ? "#111827" : "#ffffff",
+                      }}
+                      title={`${r.type}-type`}
+                    >
+                      {r.move}
+                    </span>
                     <div className="mt-0.5 flex flex-wrap gap-0.5">
                       {r.learners.map((id) => {
                         const p = byId.get(id);

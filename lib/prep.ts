@@ -8,7 +8,7 @@ import type { Pokemon, PokemonType } from "@/lib/types";
 type SpeciesEntry = { n: string; num: number; a: string[]; m: Record<string, number> };
 type PrepData = {
   generatedAt: string;
-  categories: { key: string; label: string; moves: { id: string; name: string }[] }[];
+  categories: { key: string; label: string; moves: { id: string; name: string; type: PokemonType }[] }[];
   species: Record<string, SpeciesEntry>;
 };
 
@@ -60,12 +60,6 @@ export function formatGen(format?: string): number {
   return m ? Number(m[1]) : 99;
 }
 
-// Level 100, 31 IVs
-export function speedAt(base: number, ev: 0 | 252, plusNature = false) {
-  const stat = Math.floor(((2 * base + 31 + Math.floor(ev / 4)) * 100) / 100) + 5;
-  return plusNature ? Math.floor(stat * 1.1) : stat;
-}
-
 export type PrepMember = {
   pokemon: Pokemon;
   types: PokemonType[];
@@ -75,24 +69,12 @@ export type PrepMember = {
   moves: Record<string, string[]>;
   /** attacking type → damage multiplier against this Pokémon */
   weakness: Record<PokemonType, number>;
-  speed: { base: number; neutral0: number; max252: number; plus252: number };
-};
-
-export type TypeSummaryRow = {
-  type: PokemonType;
-  stab: number;
-  immune: number;
-  quarter: number;
-  half: number;
-  double: number;
-  quad: number;
 };
 
 export type PrepTeam = {
   members: PrepMember[];
-  summary: TypeSummaryRow[];
-  /** category key → [{ move, learners }] for moves at least one member learns */
-  categories: Record<string, { move: string; learners: string[] }[]>;
+  /** category key → [{ move, type, learners }] for moves at least one member learns */
+  categories: Record<string, { move: string; type: PokemonType; learners: string[] }[]>;
   unmatched: string[];
 };
 
@@ -119,27 +101,7 @@ export function buildPrepTeam(roster: Pokemon[], format?: string): PrepTeam {
       matched: !!species,
       moves,
       weakness,
-      speed: {
-        base: pokemon.speed,
-        neutral0: speedAt(pokemon.speed, 0),
-        max252: speedAt(pokemon.speed, 252),
-        plus252: speedAt(pokemon.speed, 252, true),
-      },
     };
-  });
-
-  const summary: TypeSummaryRow[] = pokemonTypes.map((type) => {
-    const row: TypeSummaryRow = { type, stab: 0, immune: 0, quarter: 0, half: 0, double: 0, quad: 0 };
-    for (const m of members) {
-      if (m.types.includes(type)) row.stab++;
-      const x = m.weakness[type];
-      if (x === 0) row.immune++;
-      else if (x === 0.25) row.quarter++;
-      else if (x === 0.5) row.half++;
-      else if (x === 2) row.double++;
-      else if (x === 4) row.quad++;
-    }
-    return row;
   });
 
   const categories: PrepTeam["categories"] = {};
@@ -147,6 +109,7 @@ export function buildPrepTeam(roster: Pokemon[], format?: string): PrepTeam {
     categories[cat.key] = cat.moves
       .map((mv) => ({
         move: mv.name,
+        type: mv.type,
         learners: members.filter((m) => m.moves[cat.key].includes(mv.name)).map((m) => m.pokemon.id),
       }))
       .filter((row) => row.learners.length > 0);
@@ -154,7 +117,6 @@ export function buildPrepTeam(roster: Pokemon[], format?: string): PrepTeam {
 
   return {
     members,
-    summary,
     categories,
     unmatched: members.filter((m) => !m.matched).map((m) => m.pokemon.name),
   };

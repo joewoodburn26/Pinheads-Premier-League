@@ -76,16 +76,19 @@ export function SiteHeader({
           )}
 
           {/* Regular nav */}
-          {nav.map(([label, href]) => (
+          {nav.flatMap(([label, href]) => [
+            // Prep (signed-in members only) sits just left of Draft
+            ...(href === "/draft" && user
+              ? [
+                  <Link key="/prep" href="/prep" className="rounded-md px-3 py-2 hover:bg-muted">
+                    Prep
+                  </Link>,
+                ]
+              : []),
             <Link key={href} href={href} className="rounded-md px-3 py-2 hover:bg-muted">
               {label}
-            </Link>
-          ))}
-          {user && (
-            <Link href="/prep" className="rounded-md px-3 py-2 hover:bg-muted">
-              Prep
-            </Link>
-          )}
+            </Link>,
+          ])}
 
           {/* Account */}
           {user ? (
