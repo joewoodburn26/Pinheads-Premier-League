@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdmin } from "@/lib/auth";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { hasSupabaseEnv } from "@/lib/supabase/server";
@@ -8,6 +10,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 const seasonSchema = z.object({ name: z.string().min(2), draftBudget: z.coerce.number().int().positive().default(105) });
 
 export async function createSeason(formData: FormData) {
+  await requireAdmin();
   if (!hasSupabaseEnv()) return;
   const input = seasonSchema.parse(Object.fromEntries(formData));
   const supabase = createSupabaseAdminClient();
@@ -16,6 +19,7 @@ export async function createSeason(formData: FormData) {
 }
 
 export async function setActiveSeason(formData: FormData) {
+  await requireAdmin();
   if (!hasSupabaseEnv()) return;
   const seasonId = z.string().min(1).parse(formData.get("seasonId"));
   const supabase = createSupabaseAdminClient();
@@ -25,6 +29,7 @@ export async function setActiveSeason(formData: FormData) {
 }
 
 export async function archiveSeason(formData: FormData) {
+  await requireAdmin();
   if (!hasSupabaseEnv()) return;
   const seasonId = z.string().min(1).parse(formData.get("seasonId"));
   await createSupabaseAdminClient().from("seasons").update({ archived: true, active_season: false }).eq("id", seasonId);
@@ -32,6 +37,7 @@ export async function archiveSeason(formData: FormData) {
 }
 
 export async function duplicateSeason(formData: FormData) {
+  await requireAdmin();
   if (!hasSupabaseEnv()) return;
   const sourceSeasonId = z.string().min(1).parse(formData.get("seasonId"));
   const name = z.string().min(2).parse(formData.get("name"));
@@ -69,6 +75,7 @@ export async function duplicateSeason(formData: FormData) {
 }
 
 export async function updatePokemonCost(pokemonId: string, pointValue: number, seasonId?: string) {
+  await requireAdmin();
   if (!hasSupabaseEnv()) return;
   const supabase = createSupabaseAdminClient();
 
@@ -171,6 +178,7 @@ export async function updateMatch(formData: FormData) {
 }
 
 export async function updateRules(formData: FormData) {
+  await requireAdmin();
   if (!hasSupabaseEnv()) throw new Error("Supabase is not configured, so rules can't be saved.");
   const content = z.string().parse(formData.get("content"));
   const { error } = await createSupabaseAdminClient()

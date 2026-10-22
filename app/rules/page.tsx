@@ -3,6 +3,7 @@ import { RulesEditor, type BannedMon } from "@/components/rules-editor";
 import { Card } from "@/components/ui/card";
 import { getActiveSeason, getPokemon, getRulesDoc, getSchedule, getTeams } from "@/lib/data";
 import { parseRules } from "@/lib/rules";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
 import type { Pokemon } from "@/lib/types";
 
 export const revalidate = 0;
@@ -30,12 +31,14 @@ function bannedCategory(p: Pokemon): BannedMon["category"] {
 
 export default async function RulesPage() {
   const season = await getActiveSeason();
-  const [doc, teams, matches, allPokemon] = await Promise.all([
+  const [doc, teams, matches, allPokemon, user] = await Promise.all([
     getRulesDoc(),
     getTeams(season?.id),
     getSchedule(season?.id ?? ""),
     getPokemon(),
+    getCurrentUser(),
   ]);
+  const canEdit = isAdmin(user) && !user?.mustChangePassword;
 
   const sections = parseRules(doc.content);
 
@@ -97,7 +100,7 @@ export default async function RulesPage() {
       )}
 
       {/* key forces a fresh client state whenever the saved rules change */}
-      <RulesEditor key={doc.updatedAt ?? "initial"} sections={sections} banned={banned} />
+      <RulesEditor key={doc.updatedAt ?? "initial"} sections={sections} banned={banned} canEdit={canEdit} />
     </div>
   );
 }

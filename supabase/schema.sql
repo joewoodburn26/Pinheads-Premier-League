@@ -105,3 +105,15 @@ create index if not exists teams_season_idx on teams(season_id);
 create index if not exists team_pokemon_team_idx on team_pokemon(team_id);
 create index if not exists schedule_matches_week_idx on schedule_matches(season_id, week);
 create index if not exists pokemon_stats_season_idx on pokemon_stats(season_id);
+
+-- Sign-ins: one profile per league member (see supabase/auth.sql)
+create table if not exists profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  name text not null,
+  email text not null,
+  role text not null default 'coach' check (role in ('owner', 'admin', 'coach')),
+  coach_id text references coaches(id) on delete set null,
+  must_change_password boolean not null default true,
+  created_at timestamptz not null default now()
+);
+alter table profiles enable row level security;

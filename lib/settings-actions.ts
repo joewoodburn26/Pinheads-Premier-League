@@ -1,11 +1,14 @@
 "use server";
 
+import { requireAdmin } from "@/lib/auth";
+
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 // ─── Season actions ───────────────────────────────────────────────────────────
 
 export async function createNewSeason(formData: FormData) {
+  await requireAdmin();
   const supabase = createSupabaseAdminClient();
   const name        = String(formData.get("name") ?? "New Season");
   const draftBudget = Number(formData.get("draftBudget") ?? 100);
@@ -21,6 +24,7 @@ export async function createNewSeason(formData: FormData) {
 }
 
 export async function setActiveSeason(seasonId: string) {
+  await requireAdmin();
   const supabase = createSupabaseAdminClient();
 
   await supabase.from("seasons").update({ active_season: false }).neq("id", "00000000-0000-0000-0000-000000000000");
@@ -32,6 +36,7 @@ export async function setActiveSeason(seasonId: string) {
 }
 
 export async function archiveSeason(seasonId: string) {
+  await requireAdmin();
   const supabase = createSupabaseAdminClient();
   const { error } = await supabase
     .from("seasons")
@@ -43,6 +48,7 @@ export async function archiveSeason(seasonId: string) {
 }
 
 export async function deleteSeason(seasonId: string) {
+  await requireAdmin();
   const supabase = createSupabaseAdminClient();
   const { error } = await supabase.from("seasons").delete().eq("id", seasonId);
 
@@ -51,6 +57,7 @@ export async function deleteSeason(seasonId: string) {
 }
 
 export async function updateRosterSize(seasonId: string, rosterSize: number) {
+  await requireAdmin();
   const supabase = createSupabaseAdminClient();
   const { error } = await supabase
     .from("seasons")
@@ -62,6 +69,7 @@ export async function updateRosterSize(seasonId: string, rosterSize: number) {
 }
 
 export async function updateSeasonFormat(seasonId: string, format: string) {
+  await requireAdmin();
   const supabase = createSupabaseAdminClient();
   const { error } = await supabase
     .from("seasons")
@@ -73,6 +81,7 @@ export async function updateSeasonFormat(seasonId: string, format: string) {
 }
 
 export async function updatePointsFromCsv(csv: string) {
+  await requireAdmin();
   const supabase = createSupabaseAdminClient();
   const lines = csv.split("\n").map((l: string) => l.trim()).filter(Boolean);
 
@@ -104,6 +113,7 @@ export async function updatePointsFromCsv(csv: string) {
 // ─── Team actions ─────────────────────────────────────────────────────────────
 
 export async function applyTeamChanges(formData: FormData) {
+  await requireAdmin();
   const supabase = createSupabaseAdminClient();
   const seasonId = String(formData.get("seasonId") ?? "");
 
@@ -125,6 +135,7 @@ export async function applyTeamChanges(formData: FormData) {
 }
 
 export async function regenerateSchedule(seasonId: string) {
+  await requireAdmin();
   const supabase = createSupabaseAdminClient();
 
   const { data: teams, error: teamsError } = await supabase

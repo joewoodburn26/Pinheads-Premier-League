@@ -30,11 +30,19 @@ const CATEGORY_ORDER: BannedMon["category"][] = ["Legendary", "Mythical", "Parad
 // Main
 // ════════════════════════════════════════════════════════════════════════════
 
-export function RulesEditor({ sections, banned }: { sections: RuleSection[]; banned: BannedMon[] }) {
+export function RulesEditor({
+  sections,
+  banned,
+  canEdit = false,
+}: {
+  sections: RuleSection[];
+  banned: BannedMon[];
+  canEdit?: boolean;
+}) {
   const [current, setCurrent] = useState(sections);
   const [editing, setEditing] = useState(false);
 
-  return editing ? (
+  return editing && canEdit ? (
     <RulesEditMode
       sections={current}
       onCancel={() => setEditing(false)}
@@ -44,7 +52,7 @@ export function RulesEditor({ sections, banned }: { sections: RuleSection[]; ban
       }}
     />
   ) : (
-    <RulesView sections={current} banned={banned} onEdit={() => setEditing(true)} />
+    <RulesView sections={current} banned={banned} onEdit={canEdit ? () => setEditing(true) : undefined} />
   );
 }
 
@@ -59,7 +67,7 @@ function RulesView({
 }: {
   sections: RuleSection[];
   banned: BannedMon[];
-  onEdit: () => void;
+  onEdit?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState<string>(sections[0]?.id ?? "");
@@ -205,9 +213,11 @@ function RulesView({
           ))}
         </nav>
 
-        <Button variant="secondary" className="w-full" onClick={onEdit}>
-          <Pencil size={14} className="mr-2" /> Edit Rules
-        </Button>
+        {onEdit && (
+          <Button variant="secondary" className="w-full" onClick={onEdit}>
+            <Pencil size={14} className="mr-2" /> Edit Rules
+          </Button>
+        )}
       </aside>
 
       {/* ── Content ───────────────────────────────────────────────────────── */}
@@ -215,7 +225,7 @@ function RulesView({
         {empty && (
           <Card className="p-10 text-center text-muted-foreground">
             <p className="text-sm">No rules added yet.</p>
-            <p className="mt-1 text-xs">Click “Edit Rules” to add your first section.</p>
+            {onEdit && <p className="mt-1 text-xs">Click “Edit Rules” to add your first section.</p>}
           </Card>
         )}
 

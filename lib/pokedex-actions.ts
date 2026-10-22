@@ -1,11 +1,14 @@
 "use server";
 
+import { canAdmin } from "@/lib/auth";
+
 import { revalidatePath } from "next/cache";
 import { hasSupabaseEnv } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function toggleBan(pokemonId: string, banned: boolean): Promise<{ ok: boolean }> {
   if (!hasSupabaseEnv()) return { ok: false };
+  if (!(await canAdmin())) return { ok: false };
   await createSupabaseAdminClient()
     .from("pokemon")
     .update({ banned })
@@ -18,6 +21,7 @@ export async function toggleBan(pokemonId: string, banned: boolean): Promise<{ o
 
 export async function updatePointValue(pokemonId: string, pointValue: number): Promise<{ ok: boolean }> {
   if (!hasSupabaseEnv()) return { ok: false };
+  if (!(await canAdmin())) return { ok: false };
   await createSupabaseAdminClient()
     .from("pokemon")
     .update({ point_value: pointValue })
