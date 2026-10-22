@@ -1,5 +1,5 @@
 import Image from "next/image";
-import type { Pokemon } from "@/lib/types";
+import type { Pokemon, PokemonStats } from "@/lib/types";
 import { pokemonTypesFor } from "@/lib/type-chart";
 import { TypeBadge } from "@/components/type-badge";
 import { Card } from "@/components/ui/card";
@@ -65,7 +65,7 @@ function StatBar({ label, value }: { label: string; value: number }) {
 
 // ── Card ─────────────────────────────────────────────────────────────────────
 
-export async function PokemonCard({ pokemon }: { pokemon: Pokemon }) {
+export async function PokemonCard({ pokemon, stats }: { pokemon: Pokemon; stats?: PokemonStats }) {
   const types = pokemonTypesFor(pokemon);
   const abilities = await getAbilities(pokemon.dexNumber);
 
@@ -126,6 +126,23 @@ export async function PokemonCard({ pokemon }: { pokemon: Pokemon }) {
           <span className="w-8 shrink-0 font-mono font-black">{pokemon.bst}</span>
         </div>
       </div>
+
+      {/* Season battle stats (only when provided) */}
+      {stats && (
+        <div className="mt-3 grid grid-cols-4 gap-1 border-t pt-3 text-center">
+          {[
+            { label: "GP", value: stats.gamesPlayed },
+            { label: "W–L", value: `${stats.wins}–${stats.losses}` },
+            { label: "KOs", value: stats.kos },
+            { label: "Fainted", value: stats.deaths },
+          ].map((s) => (
+            <div key={s.label}>
+              <p className="text-base font-black tabular-nums">{s.value}</p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }

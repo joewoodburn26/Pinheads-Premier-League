@@ -18,6 +18,7 @@ export function InlineEdit({
 }) {
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
 
   if (!editing) {
     return (
@@ -32,9 +33,14 @@ export function InlineEdit({
     <form
       className="flex w-full items-start gap-2"
       action={(formData) => {
+        setError("");
         startTransition(async () => {
-          await action(formData);
-          setEditing(false);
+          try {
+            await action(formData);
+            setEditing(false);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Save failed");
+          }
         });
       }}
     >
@@ -46,6 +52,7 @@ export function InlineEdit({
       <Button disabled={pending} className="shrink-0">
         <Save size={16} />
       </Button>
+      {error ? <span className="self-center text-xs text-destructive">{error}</span> : null}
     </form>
   );
 }
