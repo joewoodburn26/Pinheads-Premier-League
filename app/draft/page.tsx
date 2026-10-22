@@ -3,12 +3,13 @@ import { DraftWorkspace, type LoadedPlan, type PlanContext } from "@/components/
 import { canEditTeam, canReport, getCurrentUser } from "@/lib/auth";
 import { getMyTeam, getPlan } from "@/lib/plans";
 import { getTeams } from "@/lib/data";
+import { abilitiesOf, filterAvailable, formatLabel, moveOptions } from "@/lib/dex";
 
 export const revalidate = 0;
 
 export default async function DraftPage({ searchParams }: { searchParams: Promise<{ plan?: string }> }) {
   const season = await getActiveSeason();
-  const [pokemon, user] = await Promise.all([getPokemon(), getCurrentUser()]);
+  const [allPokemon, user] = await Promise.all([getPokemon(), getCurrentUser()]);
 
   if (!season) {
     return (
@@ -18,6 +19,10 @@ export default async function DraftPage({ searchParams }: { searchParams: Promis
       </div>
     );
   }
+
+  // ── Format: Champions seasons only offer Pokémon that are in Champions ──
+  const pokemon = filterAvailable(allPokemon, season.format);
+  const abilitiesById = Object.fromEntries(pokemon.map((p) => [p.id, abilitiesOf(p)]));
 
   // ── Who can save plans, and to which team ──
   const myTeam = canReport(user) ? await getMyTeam(user, season.id) : undefined;
@@ -57,6 +62,9 @@ export default async function DraftPage({ searchParams }: { searchParams: Promis
         seasonName={season.name}
         planContext={planContext}
         initialPlan={initialPlan}
+        abilitiesById={abilitiesById}
+        moveOptions={moveOptions(season.format)}
+        formatLabel={formatLabel(season.format)}
       />
     </div>
   );

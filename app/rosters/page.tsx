@@ -2,6 +2,7 @@ import { getTeams, getRoster, getActiveSeason, getPokemon } from "@/lib/data";
 import { RostersClient } from "@/components/rosters-client";
 import { RosterTeamFilter } from "@/components/roster-team-filter";
 import { canEditTeam, getCurrentUser, isAdmin } from "@/lib/auth";
+import { filterAvailable } from "@/lib/dex";
 
 export const revalidate = 0;
 
@@ -52,7 +53,7 @@ export default async function RostersPage({
       <RostersClient
         initialRosters={rosters}
         seasonId={season.id}
-        allPokemon={allPokemon}
+        allPokemon={filterAvailable(allPokemon, season.format)}
         rosterSize={season.rosterSize ?? 10}
         editableTeamIds={editableTeamIds}
         canReorderTeams={canReorderTeams}

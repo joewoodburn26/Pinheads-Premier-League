@@ -4,17 +4,12 @@ import { Card } from "@/components/ui/card";
 import { canEditTeam, canReport, getCurrentUser } from "@/lib/auth";
 import { getActiveSeason, getRoster, getTeams } from "@/lib/data";
 import { PREP_CATEGORIES, buildPrepTeam } from "@/lib/prep";
+import { formatLabel } from "@/lib/dex";
 import { getMatchupNotes } from "@/lib/prep-notes";
 import type { Pokemon } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Prep · Pinheads Premier League" };
-
-const FORMAT_LABELS: Record<string, string> = {
-  all: "All Pokémon · latest learnsets",
-  gen9: "Gen 9 National Dex",
-  champs: "Pokémon Champions · latest learnsets",
-};
 
 export default async function PrepPage({ searchParams }: { searchParams: Promise<{ team?: string; vs?: string }> }) {
   // Coaches and above only
@@ -54,9 +49,6 @@ export default async function PrepPage({ searchParams }: { searchParams: Promise
       })
     : null;
 
-  const gen = /^gen(\d)$/.exec(season?.format ?? "");
-  const formatLabel = gen ? `Gen ${gen[1]} National Dex` : FORMAT_LABELS[season?.format ?? "all"] ?? "Latest learnsets";
-
   return (
     <PrepClient
       teams={teams
@@ -67,7 +59,7 @@ export default async function PrepPage({ searchParams }: { searchParams: Promise
       you={you}
       opp={opp}
       categories={PREP_CATEGORIES.map((c) => ({ key: c.key, label: c.label }))}
-      formatLabel={formatLabel}
+      formatLabel={formatLabel(season?.format)}
       notes={{ canEdit: canNote, text: saved.notes, updatedLabel }}
     />
   );

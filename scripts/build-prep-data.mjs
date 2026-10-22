@@ -1,9 +1,12 @@
-// Builds lib/prep-data.json for the Prep tab from Pokémon Showdown's data.
+// Builds lib/prep-data.json from Pokémon Showdown's data. Used by the Prep tab
+// and the Draft room's move/ability search.
 //
 //   node scripts/build-prep-data.mjs
 //
-// Re-run it when new games/learnsets come out. It keeps only the moves in the
-// Prep categories below, plus each species' abilities, so the file stays small.
+// Re-run it when new games/learnsets come out. For every species it stores:
+//   - abilities
+//   - every move it can learn, with the earliest generation (National Dex rules)
+//   - its Pokémon Champions movepool and whether it's available in Champions
 
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -101,68 +104,135 @@ function parseDataFile(text) {
   return value();
 }
 
-async function load(name) {
+async function download(name) {
   const res = await fetch(`${BASE}/${name}`);
   if (!res.ok) throw new Error(`Couldn't download ${name} (${res.status})`);
-  return parseDataFile(await res.text());
+  return res.text();
+}
+const load = async (name) => parseDataFile(await download(name));
+
+// moves.ts contains code, so read just each move's name and type line by line
+function parseMoves(text) {
+  const moves = {};
+  let current = null;
+  for (const line of text.split("\n")) {
+    const key = /^\t"?([a-z0-9]+)"?: \{\s*$/.exec(line);
+    if (key) { current = { id: key[1] }; continue; }
+    if (!current) continue;
+    const name = /^\t\tname: "(.+)",\s*$/.exec(line);
+    if (name) current.name = name[1];
+    const type = /^\t\ttype: "(.+)",\s*$/.exec(line);
+    if (type) current.type = type[1];
+    const nonstd = /^\t\tisNonstandard: "(.+)",\s*$/.exec(line);
+    if (nonstd) current.nonstandard = nonstd[1];
+    if (/^\t\},?\s*$/.test(line)) {
+      if (current.name && current.type) moves[current.id] = current;
+      current = null;
+    }
+  }
+  return moves;
 }
 
-const [pokedex, learnsets] = await Promise.all([load("pokedex.ts"), load("learnsets.ts")]);
+const [pokedex, learnsets, champLearnsets, champFormats, movesText] = await Promise.all([
+  load("pokedex.ts"),
+  load("learnsets.ts"),
+  load("mods/champions/learnsets.ts"),
+  load("mods/champions/formats-data.ts"),
+  download("moves.ts"),
+]);
+const moveInfo = parseMoves(movesText);
 
-const wanted = new Set(CATEGORIES.flatMap((c) => c.moves.map(([name]) => toId(name))));
+// Moves we list: anything a species can learn, minus Z/Max/CAP-only moves
+const SKIP_NONSTANDARD = new Set(["Gigantamax", "CAP", "LGPE", "Custom"]);
+const usableMove = (id) => {
+  const m = moveInfo[id];
+  return m && !SKIP_NONSTANDARD.has(m.nonstandard) && !/^(max|gmax)/.test(id);
+};
 
-// Earliest generation each species can learn each wanted move, following
-// forme bases and pre-evolutions (egg/tutor moves live on the earliest stage).
-function ownMoves(id) {
-  const learnset = learnsets[id]?.learnset;
+// ── National Dex learnsets: earliest generation per move ──────────────────────
+// Follows forme bases and pre-evolutions (egg/tutor moves live on the earliest stage).
+function ownMoves(table, id) {
+  const learnset = table[id]?.learnset;
   if (!learnset) return null;
   const out = {};
   for (const [move, sources] of Object.entries(learnset)) {
-    if (!wanted.has(move)) continue;
+    if (!usableMove(move)) continue;
     const gens = sources.map((s) => parseInt(String(s)[0], 10)).filter((n) => n > 0);
     if (gens.length) out[move] = Math.min(...gens);
   }
   return out;
 }
 
-function speciesMoves(id, seen = new Set()) {
+function baseOf(entry, id) {
+  const from = entry?.changesFrom ?? entry?.battleOnly ?? entry?.baseSpecies;
+  const base = Array.isArray(from) ? from[0] : from;
+  return base && toId(base) !== id ? toId(base) : null;
+}
+
+function speciesMoves(table, id, withPrevos, seen = new Set()) {
   if (seen.has(id)) return {};
   seen.add(id);
   const entry = pokedex[id];
-  let moves = ownMoves(id);
-  if (!moves && entry) {
-    const from = entry.changesFrom ?? entry.battleOnly ?? entry.baseSpecies;
-    const base = Array.isArray(from) ? from[0] : from;
-    if (base && toId(base) !== id) moves = speciesMoves(toId(base), seen);
+  let moves = ownMoves(table, id);
+  if (!moves) {
+    const base = baseOf(entry, id);
+    if (base) moves = speciesMoves(table, base, withPrevos, seen);
   }
   const merged = { ...(moves ?? {}) };
-  if (entry?.prevo) {
-    for (const [m, g] of Object.entries(speciesMoves(toId(entry.prevo), seen))) {
+  if (withPrevos && entry?.prevo) {
+    for (const [m, g] of Object.entries(speciesMoves(table, toId(entry.prevo), withPrevos, seen))) {
       merged[m] = Math.min(merged[m] ?? 99, g);
     }
   }
   return merged;
 }
 
+// ── Pokémon Champions availability ────────────────────────────────────────────
+function inChampions(id) {
+  const f = champFormats[id] ?? champFormats[baseOf(pokedex[id], id) ?? ""];
+  return !!f && f.tier !== "Illegal" && !f.isNonstandard;
+}
+
+// ── Assemble ──────────────────────────────────────────────────────────────────
+const moveIndex = new Map();
+const moveList = [];
+const idx = (id) => {
+  if (!moveIndex.has(id)) {
+    moveIndex.set(id, moveList.length);
+    moveList.push([id, moveInfo[id].name, moveInfo[id].type]);
+  }
+  return moveIndex.get(id);
+};
+
 const species = {};
 for (const [id, entry] of Object.entries(pokedex)) {
   if (!entry || typeof entry.num !== "number" || entry.num <= 0) continue;
-  species[id] = {
+  const natdex = speciesMoves(learnsets, id, true);
+  const record = {
     n: entry.name,
     num: entry.num,
     a: [...new Set(Object.values(entry.abilities ?? {}))],
-    m: speciesMoves(id),
+    // "moveIndex.gen,moveIndex.gen,…"
+    l: Object.entries(natdex).map(([m, g]) => `${idx(m)}.${g}`).join(","),
   };
+  if (inChampions(id)) {
+    record.ch = 1;
+    const champ = speciesMoves(champLearnsets, id, false);
+    record.c = Object.keys(champ).map(idx).join(",");
+  }
+  species[id] = record;
 }
 
 const out = {
   generatedAt: new Date().toISOString(),
   source: "Pokémon Showdown data (smogon/pokemon-showdown)",
   categories: CATEGORIES.map((c) => ({ ...c, moves: c.moves.map(([name, type]) => ({ id: toId(name), name, type })) })),
+  /** [id, name, type] — learnsets refer to moves by position in this list */
+  moves: moveList,
   species,
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
 const target = join(here, "..", "lib", "prep-data.json");
 writeFileSync(target, JSON.stringify(out));
-console.log(`Wrote ${Object.keys(species).length} species to lib/prep-data.json`);
+console.log(`Wrote ${Object.keys(species).length} species and ${moveList.length} moves to lib/prep-data.json`);

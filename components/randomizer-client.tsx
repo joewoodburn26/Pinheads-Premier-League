@@ -254,7 +254,7 @@ function PokemonResultCard({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-export function RandomizerClient({ allPokemon }: { allPokemon: Pokemon[] }) {
+export function RandomizerClient({ allPokemon, defaultFormat }: { allPokemon: Pokemon[]; defaultFormat?: string }) {
   // Filters
   const [count, setCount]               = useState(6);
   const [minPts, setMinPts]             = useState<number | "">(1);
@@ -266,7 +266,10 @@ export function RandomizerClient({ allPokemon }: { allPokemon: Pokemon[] }) {
   const [allowLegendary, setAllowLegendary] = useState(false);
   const [allowMythical,  setAllowMythical]  = useState(false);
   const [allowParadox,   setAllowParadox]   = useState(false);
-  const [formatValue, setFormatValue]   = useState("all");
+  // Starts on the season's format (e.g. Champions), but can be changed
+  const [formatValue, setFormatValue]   = useState(
+    FORMAT_OPTIONS.some(f => f.value === defaultFormat) ? defaultFormat! : "all",
+  );
   const [budgetCap, setBudgetCap]       = useState<number | "">("");
   const [stageFilter, setStageFilter]   = useState<StageFilter>("any");
   // Draft legality: "legal" = only non-banned (default), "banned" = only banned, "any" = all

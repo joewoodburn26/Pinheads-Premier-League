@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useMemo, useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, X, LayoutList, LayoutGrid, ChevronUp, ChevronDown, Share2, Download, Trash2, Bookmark } from "lucide-react";
+import { Search, X, LayoutList, LayoutGrid, ChevronUp, ChevronDown, Share2, Download, Trash2, Bookmark, Swords, Sparkles } from "lucide-react";
 import { savePlan } from "@/lib/plan-actions";
 import { TypeBadge } from "@/components/type-badge";
 import { Button } from "@/components/ui/button";
@@ -49,7 +49,7 @@ function StatBar({ label, value, max }: { label: string; value: number; max: num
   const pct = Math.min(100, Math.round((value / max) * 100));
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="w-12 shrink-0 text-right text-muted-foreground">{label}</span>
+      <span className="w-11 shrink-0 text-right text-muted-foreground">{label}</span>
       <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
         <div className={`h-full rounded-full ${statColor(value)}`} style={{ width: `${pct}%` }} />
       </div>
@@ -741,8 +741,13 @@ function PlanPanel({
   );
 }
 
+export type MoveOption = { id: string; name: string; type: PokemonType };
+
+const EMPTY_ABILITIES: Record<string, string[]> = {};
+const EMPTY_MOVES: MoveOption[] = [];
+
 export function DraftWorkspace({
-  pokemon, budget, seasonName, planContext, initialPlan,
+  pokemon, budget, seasonName, planContext, initialPlan, abilitiesById = EMPTY_ABILITIES, moveOptions = EMPTY_MOVES, formatLabel,
 }: {
   pokemon: Pokemon[];
   budget: number;
@@ -750,7 +755,50 @@ export function DraftWorkspace({
   planContext?: PlanContext;
   /** Plan opened with "Open in Draft Room" */
   initialPlan?: LoadedPlan | null;
+  /** Pokémon id → abilities (shown on list cards, searchable) */
+  abilitiesById?: Record<string, string[]>;
+  /** Moves learnable in the season's format (move search suggestions) */
+  moveOptions?: MoveOption[];
+  formatLabel?: string;
 }) {
+  // ── Move + ability search ──
+  const [abilityQuery, setAbilityQuery] = useState("");
+  const [moveInput, setMoveInput] = useState("");
+  const [selectedMoves, setSelectedMoves] = useState<MoveOption[]>([]);
+  const [moveMatches, setMoveMatches] = useState<Set<string> | null>(null);
+  const [moveLoading, setMoveLoading] = useState(false);
+  const [moveError, setMoveError] = useState("");
+  const allAbilities = useMemo(
+    () => [...new Set(Object.values(abilitiesById).flat())].sort((a, b) => a.localeCompare(b)),
+    [abilitiesById],
+  );
+
+  useEffect(() => {
+    if (selectedMoves.length === 0) { setMoveMatches(null); return; }
+    let cancelled = false;
+    setMoveLoading(true);
+    setMoveError("");
+    fetch(`/api/move-search?moves=${selectedMoves.map(m => m.id).join(",")}`)
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((data: { ids: string[] }) => { if (!cancelled) setMoveMatches(new Set(data.ids)); })
+      .catch(() => { if (!cancelled) setMoveError("Move search failed. Try again."); })
+      .finally(() => { if (!cancelled) setMoveLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedMoves]);
+
+  function addMove(raw: string) {
+    const q = raw.trim().toLowerCase();
+    if (!q) return;
+    const match =
+      moveOptions.find(m => m.name.toLowerCase() === q) ??
+      moveOptions.find(m => m.name.toLowerCase().startsWith(q));
+    if (!match) { setMoveError(`No move called “${raw.trim()}” in this format.`); return; }
+    setMoveError("");
+    setMoveInput("");
+    setPage(1);
+    setSelectedMoves(prev => (prev.some(m => m.id === match.id) || prev.length >= 4 ? prev : [...prev, match]));
+  }
+
   const [loadedPlan, setLoadedPlan] = useState<LoadedPlan | null>(initialPlan ?? null);
   const legal = useMemo(
     () => pokemon.filter((m) => !m.banned && !m.legendary && !m.mythical && !m.paradox),
@@ -855,8 +903,11 @@ export function DraftWorkspace({
     const q = query.toLowerCase();
     const min = minPts === "" ? 0 : parseInt(minPts);
     const max = maxPts === "" ? Infinity : parseInt(maxPts);
+    const aq = abilityQuery.trim().toLowerCase();
     return legal.filter(m => {
       if (!m.name.toLowerCase().includes(q)) return false;
+      if (aq && !(abilitiesById[m.id] ?? []).some(a => a.toLowerCase().includes(aq))) return false;
+      if (selectedMoves.length > 0 && moveMatches && !moveMatches.has(m.id)) return false;
       if (m.pointValue < min || m.pointValue > max) return false;
       if (types.length > 0 && !types.every(t => pokemonTypesFor(m).includes(t))) return false;
       return true;
@@ -864,7 +915,7 @@ export function DraftWorkspace({
       const diff = sortKey === "name" ? a.name.localeCompare(b.name) : (a[sortKey] as number) - (b[sortKey] as number);
       return sortDir === "asc" ? diff : -diff;
     });
-  }, [legal, query, types, minPts, maxPts, sortKey, sortDir]);
+  }, [legal, query, types, minPts, maxPts, sortKey, sortDir, abilityQuery, abilitiesById, selectedMoves, moveMatches]);
 
   const PAGE_SIZES: PageSize[] = [25, 50, 100, "ALL"];
   const totalPages = pageSize === "ALL" ? 1 : Math.ceil(filtered.length / (pageSize as number));
@@ -887,11 +938,74 @@ export function DraftWorkspace({
       <div className="grid gap-3 sm:grid-cols-[1fr_110px_110px]">
         <label className="relative">
           <Search className="absolute left-3 top-2.5 text-muted-foreground" size={16} />
-          <Input className="pl-9" value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} placeholder="Search Pokémon" />
+          <Input className="pl-9" value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} placeholder="Search by name" />
         </label>
         <Input type="number" placeholder="Min pts" value={minPts} onChange={e => { setMinPts(e.target.value); setPage(1); }} />
         <Input type="number" placeholder="Max pts" value={maxPts} onChange={e => { setMaxPts(e.target.value); setPage(1); }} />
       </div>
+
+      {/* Moves + abilities */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <form
+            className="relative"
+            onSubmit={e => { e.preventDefault(); addMove(moveInput); }}
+          >
+            <Swords className="absolute left-3 top-2.5 text-muted-foreground" size={16} />
+            <Input
+              className="pl-9"
+              list="draft-move-options"
+              value={moveInput}
+              onChange={e => {
+                const v = e.target.value;
+                setMoveInput(v);
+                if (moveOptions.some(m => m.name.toLowerCase() === v.trim().toLowerCase())) addMove(v);
+              }}
+              placeholder={selectedMoves.length >= 4 ? "Up to 4 moves" : "Search by move (learns all)"}
+              disabled={selectedMoves.length >= 4}
+            />
+            <datalist id="draft-move-options">
+              {moveOptions.map(m => <option key={m.id} value={m.name} />)}
+            </datalist>
+          </form>
+          {(selectedMoves.length > 0 || moveError) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {selectedMoves.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => { setSelectedMoves(prev => prev.filter(x => x.id !== m.id)); setPage(1); }}
+                  className="flex items-center gap-1 rounded px-2 py-0.5 text-xs font-bold text-white"
+                  style={{ background: typeColors[m.type], textShadow: "0 1px 1px rgba(0,0,0,0.45)" }}
+                  title="Remove"
+                >
+                  {m.name} <X size={11} />
+                </button>
+              ))}
+              {moveLoading && <span className="text-xs text-muted-foreground">Searching…</span>}
+              {moveError && <span className="text-xs text-red-400">{moveError}</span>}
+            </div>
+          )}
+        </div>
+        <label className="relative block">
+          <Sparkles className="absolute left-3 top-2.5 text-muted-foreground" size={16} />
+          <Input
+            className="pl-9 pr-8"
+            list="draft-ability-options"
+            value={abilityQuery}
+            onChange={e => { setAbilityQuery(e.target.value); setPage(1); }}
+            placeholder="Search by ability"
+          />
+          {abilityQuery && (
+            <button type="button" onClick={() => setAbilityQuery("")} className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground" aria-label="Clear ability">
+              <X size={14} />
+            </button>
+          )}
+          <datalist id="draft-ability-options">
+            {allAbilities.map(a => <option key={a} value={a} />)}
+          </datalist>
+        </label>
+      </div>
+      {formatLabel && <p className="text-[11px] text-muted-foreground">Moves follow this season&apos;s format: {formatLabel}</p>}
       <div>
         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Type {types.length > 0 && `(${types.length} — must have ALL)`}
@@ -976,29 +1090,34 @@ export function DraftWorkspace({
                       canAdd    ? "hover:border-primary/40 hover:bg-muted/30" :
                       "opacity-50 cursor-not-allowed"
                     }`}>
-                    <div className="flex items-start gap-4">
-                      <Image src={mon.spriteUrl} alt={mon.name} width={80} height={80} className="size-20 shrink-0 object-contain" />
+                    <div className="flex items-center gap-4">
+                      <Image src={mon.spriteUrl} alt={mon.name} width={128} height={128} className="size-28 shrink-0 object-contain" />
                       <div className="min-w-0 flex-1 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs text-muted-foreground font-mono">#{String(mon.dexNumber).padStart(4, "0")}</span>
-                          <h3 className="text-lg font-bold">{mon.name}</h3>
+                          <h3 className="text-lg font-bold leading-tight">{mon.name}</h3>
                           <div className="flex flex-wrap gap-1">{pokemonTypesFor(mon).map(t => <TypeBadge key={t} type={t} />)}</div>
-                          {inBuilder && <span className="ml-auto rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">✓ Added — click to remove</span>}
+                          {inBuilder && <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">✓ Added</span>}
                         </div>
-                        <div className="space-y-1">
-                          {STAT_KEYS.map(({ key, label }) => <StatBar key={key} label={label} value={mon[key]} max={255} />)}
-                          <div className="flex items-center gap-2 border-t pt-1 text-xs">
-                            <span className="w-12 shrink-0 text-right font-semibold">BST</span>
-                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                              <div className="h-full rounded-full bg-primary/60" style={{ width: `${Math.min(100, Math.round((mon.bst / 720) * 100))}%` }} />
-                            </div>
-                            <span className="w-8 shrink-0 font-mono font-black">{mon.bst}</span>
-                          </div>
+                        {(abilitiesById[mon.id]?.length ?? 0) > 0 && (
+                          <p className="text-xs text-muted-foreground">{abilitiesById[mon.id].join(" · ")}</p>
+                        )}
+                        <div className="grid max-w-md grid-cols-2 gap-x-6 gap-y-1">
+                          {[0, 3, 1, 4, 2, 5].map(i => {
+                            const { key, label } = STAT_KEYS[i];
+                            return <StatBar key={key} label={label} value={mon[key]} max={255} />;
+                          })}
                         </div>
                       </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-3xl font-black leading-none">{mon.pointValue}</p>
-                        <p className="text-xs text-muted-foreground">pts</p>
+                      <div className="flex shrink-0 flex-col items-end gap-2 self-stretch">
+                        <div className="text-right">
+                          <p className="text-3xl font-black leading-none">{mon.pointValue}</p>
+                          <p className="text-xs text-muted-foreground">pts</p>
+                        </div>
+                        <div className="mt-auto rounded-md bg-muted px-2 py-1 text-right">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">BST</p>
+                          <p className="font-mono text-sm font-black leading-none">{mon.bst}</p>
+                        </div>
                       </div>
                     </div>
                   </Card>
