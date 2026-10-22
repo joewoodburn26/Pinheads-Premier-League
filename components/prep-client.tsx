@@ -18,9 +18,6 @@ type Category = { key: string; label: string };
 const YOU = { color: "#3b82f6", label: "You" };
 const OPP = { color: "#ef4444", label: "Opponent" };
 
-// Light type colors need dark text to stay readable
-const DARK_TEXT_TYPES = new Set<PokemonType>(["Electric", "Ice", "Normal", "Ground", "Steel", "Fairy", "Flying", "Grass", "Bug", "Rock"]);
-
 function speedAt(base: number, level: 50 | 100, ev: 0 | 252, plusNature = false) {
   // 31 IVs
   const stat = Math.floor(((2 * base + 31 + Math.floor(ev / 4)) * level) / 100) + 5;
@@ -417,10 +414,7 @@ function MoveCategoryCard({ label, you, opp, catKey }: { label: string; you: Pre
                   <div key={r.move}>
                     <span
                       className="inline-block rounded px-2 py-0.5 text-xs font-bold"
-                      style={{
-                        background: typeColors[r.type],
-                        color: DARK_TEXT_TYPES.has(r.type) ? "#111827" : "#ffffff",
-                      }}
+                      style={{ background: typeColors[r.type], color: "#ffffff", textShadow: "0 1px 1px rgba(0,0,0,0.45)" }}
                       title={`${r.type}-type`}
                     >
                       {r.move}
