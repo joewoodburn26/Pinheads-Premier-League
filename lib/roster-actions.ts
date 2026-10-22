@@ -107,14 +107,17 @@ export async function reorderRoster(orderedIds: string[]) {
   const supabase = createSupabaseAdminClient();
 
   // Update each slot's slot_order to match its position in the array
-  const updates = orderedIds.map((id, index) =>
-    supabase
-      .from("team_pokemon")
-      .update({ slot_order: index })
-      .eq("id", id)
+  const results = await Promise.all(
+    orderedIds.map((id, index) =>
+      supabase
+        .from("team_pokemon")
+        .update({ slot_order: index })
+        .eq("id", id)
+    )
   );
 
-  await Promise.all(updates);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) return { success: false, error: failed.error.message };
 
   revalidatePath("/rosters");
   revalidatePath("/teams");

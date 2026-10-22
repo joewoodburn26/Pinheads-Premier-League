@@ -116,10 +116,7 @@ export const getAllPokemon = getPokemon;
 export async function getTeamPokemon(seasonId: string): Promise<TeamPokemon[]> {
   if (!hasSupabaseEnv()) return teamPokemon.filter(s => s.seasonId === seasonId);
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase
-    .from("team_pokemon")
-    .select("*, pokemon(*)")
-    .eq("season_id", seasonId);
+  const data = await selectSlotsInOrder(supabase, "season_id", seasonId);
 
   return (data ?? []).map(row => ({
     id:        row.id,
@@ -133,10 +130,7 @@ export async function getTeamPokemon(seasonId: string): Promise<TeamPokemon[]> {
 export async function getRoster(teamId: string): Promise<TeamPokemon[]> {
   if (!hasSupabaseEnv()) return teamPokemon.filter(s => s.teamId === teamId);
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase
-    .from("team_pokemon")
-    .select("*, pokemon(*)")
-    .eq("team_id", teamId);
+  const data = await selectSlotsInOrder(supabase, "team_id", teamId);
 
   return (data ?? []).map(row => ({
     id:        row.id,
@@ -145,6 +139,26 @@ export async function getRoster(teamId: string): Promise<TeamPokemon[]> {
     pokemonId: row.pokemon_id,
     pokemon: row.pokemon ? mapPokemon(row.pokemon) : undefined,
   }));
+}
+
+/**
+ * Roster slots in their saved drag-and-drop order (slot_order).
+ * Falls back to an unordered query if the slot_order column is missing.
+ */
+async function selectSlotsInOrder(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  column: "team_id" | "season_id",
+  value: string,
+) {
+  const ordered = await supabase
+    .from("team_pokemon")
+    .select("*, pokemon(*)")
+    .eq(column, value)
+    .order("slot_order", { ascending: true, nullsFirst: false });
+  if (!ordered.error) return ordered.data ?? [];
+
+  const { data } = await supabase.from("team_pokemon").select("*, pokemon(*)").eq(column, value);
+  return data ?? [];
 }
 
 // ─── Schedule ─────────────────────────────────────────────────────────────────

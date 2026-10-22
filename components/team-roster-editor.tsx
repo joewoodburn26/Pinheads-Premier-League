@@ -178,10 +178,10 @@ function PokemonSlotCell({
   slot: TeamPokemon & { pokemon?: Pokemon };
   allPokemon: Pokemon[];
   isDragOver: boolean;
-  onDragStart: () => void;
+  onDragStart: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragEnd: () => void;
-  onDrop: () => void;
+  onDrop: (e: React.DragEvent) => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [showSelector, setShowSelector] = useState(false);
@@ -220,7 +220,7 @@ function PokemonSlotCell({
           <button onClick={handleRemove} title="Remove Pokémon"
             className="rounded bg-muted px-1.5 py-0.5 text-xs hover:bg-destructive hover:text-destructive-foreground transition-colors">✕</button>
         </div>
-        <Image src={pokemon.spriteUrl} alt={pokemon.name} width={96} height={96} className="size-20 object-contain mt-2" />
+        <Image src={pokemon.spriteUrl} alt={pokemon.name} width={96} height={96} draggable={false} className="pointer-events-none size-20 object-contain mt-2" />
         <p className="text-sm font-semibold leading-tight">{pokemon.name}</p>
         <div className="flex flex-wrap justify-center gap-0.5">
           {types.map((t) => <TypeBadge key={t} type={t} />)}
@@ -242,7 +242,7 @@ function EmptySlotCell({
   teamId: string; seasonId: string; allPokemon: Pokemon[];
   isDragOver: boolean;
   onDragOver: (e: React.DragEvent) => void;
-  onDrop: () => void;
+  onDrop: (e: React.DragEvent) => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [showSelector, setShowSelector] = useState(false);
@@ -289,6 +289,7 @@ export function TeamRosterEditor({
   const [isPending, startTransition] = useTransition();
   const dragIndexRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [orderError, setOrderError] = useState("");
 
   // Keep local state in sync with server data after revalidation
   useEffect(() => {
@@ -298,13 +299,18 @@ export function TeamRosterEditor({
   const padded = Array.from({ length: rosterSize }, (_, i) => localSlots[i] ?? null);
   const totalPoints = localSlots.reduce((sum, s) => sum + (s.pokemon?.pointValue ?? 0), 0);
 
-  function handleDragStart(index: number) {
+  function handleDragStart(e: React.DragEvent, index: number) {
     dragIndexRef.current = index;
+    // Firefox won't start a drag unless some data is set
+    e.dataTransfer.setData("text/plain", String(index));
+    e.dataTransfer.effectAllowed = "move";
   }
 
   function handleDragOver(e: React.DragEvent, index: number) {
+    if (dragIndexRef.current === null) return; // ignore drags from elsewhere (other teams, files)
     e.preventDefault();
-    setDragOverIndex(index);
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverIndex !== index) setDragOverIndex(index);
   }
 
   function handleDragEnd() {
@@ -312,20 +318,27 @@ export function TeamRosterEditor({
     setDragOverIndex(null);
   }
 
-  function handleDrop(dropIndex: number) {
+  function handleDrop(e: React.DragEvent, dropIndex: number) {
+    e.preventDefault();
     const dragIndex = dragIndexRef.current;
     if (dragIndex === null || dragIndex === dropIndex) {
       setDragOverIndex(null);
       return;
     }
 
+    const previous = localSlots;
     const newSlots = [...localSlots];
     const draggedSlot = newSlots[dragIndex];
-    if (draggedSlot) {
-      newSlots.splice(dragIndex, 1);
-      newSlots.splice(dropIndex, 0, draggedSlot);
-      setLocalSlots(newSlots);
+    if (!draggedSlot) {
+      setDragOverIndex(null);
+      dragIndexRef.current = null;
+      return;
     }
+    newSlots.splice(dragIndex, 1);
+    // Dropping on an empty slot moves the card to the end of the filled slots
+    newSlots.splice(Math.min(dropIndex, newSlots.length), 0, draggedSlot);
+    setLocalSlots(newSlots);
+    setOrderError("");
 
     setDragOverIndex(null);
     dragIndexRef.current = null;
@@ -335,13 +348,23 @@ export function TeamRosterEditor({
       .map((s) => s.id);
 
     startTransition(async () => {
-      await reorderRoster(orderedIds);
+      try {
+        const result = await reorderRoster(orderedIds);
+        if (!result.success) {
+          setLocalSlots(previous);
+          setOrderError(`Couldn't save the new order: ${"error" in result ? result.error : "unknown error"}`);
+        }
+      } catch {
+        setLocalSlots(previous);
+        setOrderError("Couldn't save the new order. Try again.");
+      }
     });
   }
 
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">⠿ Drag cards to reorder</p>
+      {orderError && <p className="text-xs text-red-400">{orderError}</p>}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 lg:grid-cols-10">
         {padded.map((slot, idx) =>
           slot ? (
@@ -350,10 +373,10 @@ export function TeamRosterEditor({
               slot={slot}
               allPokemon={allPokemon}
               isDragOver={dragOverIndex === idx}
-              onDragStart={() => handleDragStart(idx)}
+              onDragStart={(e) => handleDragStart(e, idx)}
               onDragOver={(e) => handleDragOver(e, idx)}
               onDragEnd={handleDragEnd}
-              onDrop={() => handleDrop(idx)}
+              onDrop={(e) => handleDrop(e, idx)}
             />
           ) : (
             <EmptySlotCell
@@ -363,7 +386,7 @@ export function TeamRosterEditor({
               allPokemon={allPokemon}
               isDragOver={dragOverIndex === idx}
               onDragOver={(e) => handleDragOver(e, idx)}
-              onDrop={() => handleDrop(idx)}
+              onDrop={(e) => handleDrop(e, idx)}
             />
           )
         )}
