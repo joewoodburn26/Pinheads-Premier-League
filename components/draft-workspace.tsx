@@ -1,8 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState, useEffect } from "react";
-import { Search, X, LayoutList, LayoutGrid, ChevronUp, ChevronDown, Share2, Download, Trash2 } from "lucide-react";
+import { useMemo, useState, useEffect, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Search, X, LayoutList, LayoutGrid, ChevronUp, ChevronDown, Share2, Download, Trash2, Bookmark } from "lucide-react";
+import { savePlan } from "@/lib/plan-actions";
 import { TypeBadge } from "@/components/type-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,7 +20,7 @@ type SortKey = "pointValue" | "bst" | "hp" | "attack" | "defense" | "specialAtta
 type SortDir = "asc" | "desc";
 type PageSize = 25 | 50 | 100 | "ALL";
 
-interface BuilderSlot {
+export interface BuilderSlot {
   pokemon: Pokemon;
   note: string;
 }
@@ -96,7 +99,7 @@ function TierCell({ mon, inBuilder, onToggle }: {
 
 // ─── Coverage map ─────────────────────────────────────────────────────────────
 
-function CoverageMap({ slots }: { slots: BuilderSlot[] }) {
+export function CoverageMap({ slots }: { slots: BuilderSlot[] }) {
   const pokemon = slots.map(s => s.pokemon);
 
   const coverage = useMemo(() => {
@@ -142,7 +145,7 @@ function CoverageMap({ slots }: { slots: BuilderSlot[] }) {
 
 // ─── Role balance ─────────────────────────────────────────────────────────────
 
-function RoleBalance({ slots }: { slots: BuilderSlot[] }) {
+export function RoleBalance({ slots }: { slots: BuilderSlot[] }) {
   const pokemon = slots.map(s => s.pokemon);
   if (pokemon.length === 0) return <p className="text-xs text-muted-foreground italic">No Pokémon added</p>;
 
@@ -183,7 +186,7 @@ function RoleBalance({ slots }: { slots: BuilderSlot[] }) {
 
 // ─── Threat score ─────────────────────────────────────────────────────────────
 
-function ThreatScore({ slots }: { slots: BuilderSlot[] }) {
+export function ThreatScore({ slots }: { slots: BuilderSlot[] }) {
   const pokemon = slots.map(s => s.pokemon);
   if (pokemon.length === 0) return <p className="text-xs text-muted-foreground italic">No Pokémon added</p>;
 
@@ -214,7 +217,7 @@ function ThreatScore({ slots }: { slots: BuilderSlot[] }) {
 
 // ─── Speed tiers ──────────────────────────────────────────────────────────────
 
-function SpeedTiers({ slots }: { slots: BuilderSlot[] }) {
+export function SpeedTiers({ slots }: { slots: BuilderSlot[] }) {
   const pokemon = slots.map(s => s.pokemon);
   if (pokemon.length === 0) return <p className="text-xs text-muted-foreground italic">No Pokémon added</p>;
 
@@ -263,7 +266,7 @@ function decodeTeam(encoded: string, allPokemon: Pokemon[]): BuilderSlot[] {
 
 // ─── PDF export ───────────────────────────────────────────────────────────────
 
-function exportToPdf(slots: BuilderSlot[], budget: number, seasonName?: string) {
+export function exportToPdf(slots: BuilderSlot[], budget: number, seasonName?: string) {
   const used    = slots.reduce((sum, s) => sum + s.pokemon.pointValue, 0);
   const avgBst  = Math.round(slots.reduce((s, b) => s + b.pokemon.bst, 0) / Math.max(1, slots.length));
   const date    = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
@@ -490,8 +493,10 @@ function exportToPdf(slots: BuilderSlot[], budget: number, seasonName?: string) 
 // ─── Team Builder sidebar ─────────────────────────────────────────────────────
 
 function TeamBuilder({
-  slots, onRemove, onNoteChange, onClear, budget, seasonName,
+  slots, onRemove, onNoteChange, onClear, budget, seasonName, planPanel,
 }: {
+  /** Save-plan controls (shown when the member can save plans) */
+  planPanel?: React.ReactNode;
   slots: BuilderSlot[];
   onRemove: (id: string) => void;
   onNoteChange: (id: string, note: string) => void;
@@ -539,6 +544,7 @@ function TeamBuilder({
             </div>
           </div>
           {shareMsg && <p className="text-xs text-green-400">{shareMsg}</p>}
+          {planPanel}
           <p className="text-xs text-muted-foreground">Click any Pokémon to add · click again to remove</p>
 
           {/* Budget bar */}
@@ -635,7 +641,117 @@ function TeamBuilder({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function DraftWorkspace({ pokemon, budget, seasonName }: { pokemon: Pokemon[]; budget: number; seasonName?: string }) {
+// ─── Save plan panel ──────────────────────────────────────────────────────────
+
+export type PlanContext = {
+  /** Signed in and linked to a team this season */
+  canSave: boolean;
+  teamId?: string;
+  teamName?: string;
+  /** Why saving isn't available (shown as a hint) */
+  reason?: string;
+};
+
+export type LoadedPlan = { id: string; name: string; teamId: string; picks: { id: string; note: string }[] };
+
+function PlanPanel({
+  slots, context, loaded, onLoadedChange,
+}: {
+  slots: BuilderSlot[];
+  context: PlanContext;
+  loaded: LoadedPlan | null;
+  onLoadedChange: (plan: LoadedPlan | null) => void;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState<{ ok: boolean; text: string; href?: string } | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  if (!context.canSave && !loaded) {
+    return context.reason ? <p className="text-xs text-muted-foreground">{context.reason}</p> : null;
+  }
+
+  const picks = slots.map((s) => ({ id: s.pokemon.id, note: s.note }));
+
+  function save(planId: string | null, planName: string) {
+    setMessage(null);
+    startTransition(async () => {
+      try {
+        const result = await savePlan({ planId, name: planName, picks });
+        if (result.error || !result.id) return setMessage({ ok: false, text: result.error ?? "Couldn't save the plan." });
+        const teamId = result.teamId ?? loaded?.teamId ?? context.teamId ?? "";
+        onLoadedChange({ id: result.id, name: planName, teamId, picks });
+        setOpen(false);
+        setName("");
+        setMessage({ ok: true, text: planId ? `✓ Saved changes to “${planName}”` : `✓ Saved “${planName}”`, href: `/teams/${teamId}/plans/${result.id}` });
+        router.refresh();
+      } catch {
+        setMessage({ ok: false, text: "Couldn't save the plan. Try again." });
+      }
+    });
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-blue-500/30 bg-blue-500/5 p-2.5">
+      {loaded ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-muted-foreground">Editing plan</span>
+          <span className="font-bold">“{loaded.name}”</span>
+          <button onClick={() => { onLoadedChange(null); setMessage(null); }} className="ml-auto text-muted-foreground underline hover:text-foreground">
+            Stop editing
+          </button>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Plans save privately to <span className="font-semibold text-foreground">{context.teamName}</span>.
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {loaded && (
+          <Button onClick={() => save(loaded.id, loaded.name)} disabled={pending || slots.length === 0} className="h-8 px-3 text-xs">
+            <Bookmark size={13} className="mr-1.5" /> {pending ? "Saving…" : "Save changes"}
+          </Button>
+        )}
+        {context.canSave && (
+          <Button variant="secondary" onClick={() => setOpen((o) => !o)} disabled={pending || slots.length === 0} className="h-8 px-3 text-xs">
+            <Bookmark size={13} className="mr-1.5" /> {loaded ? "Save as new plan" : "Save plan"}
+          </Button>
+        )}
+      </div>
+
+      {open && (
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => { e.preventDefault(); save(null, name); }}
+        >
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Plan name, e.g. Plan A: Rain team" className="h-8 text-xs" autoFocus maxLength={80} />
+          <Button disabled={pending || !name.trim()} className="h-8 shrink-0 px-3 text-xs">{pending ? "Saving…" : "Save"}</Button>
+        </form>
+      )}
+
+      {message && (
+        <p className={`text-xs ${message.ok ? "text-green-400" : "text-red-400"}`}>
+          {message.text}
+          {message.href && <> · <Link href={message.href} className="underline">View plan</Link></>}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function DraftWorkspace({
+  pokemon, budget, seasonName, planContext, initialPlan,
+}: {
+  pokemon: Pokemon[];
+  budget: number;
+  seasonName?: string;
+  planContext?: PlanContext;
+  /** Plan opened with "Open in Draft Room" */
+  initialPlan?: LoadedPlan | null;
+}) {
+  const [loadedPlan, setLoadedPlan] = useState<LoadedPlan | null>(initialPlan ?? null);
   const legal = useMemo(
     () => pokemon.filter((m) => !m.banned && !m.legendary && !m.mythical && !m.paradox),
     [pokemon]
@@ -661,8 +777,20 @@ export function DraftWorkspace({ pokemon, budget, seasonName }: { pokemon: Pokem
   // ── Builder state ──
   const [slots, setSlots] = useState<BuilderSlot[]>([]);
 
+  // ── Load a saved plan ("Open in Draft Room") ──
+  useEffect(() => {
+    if (!initialPlan) return;
+    const byId = new Map(pokemon.map(p => [p.id, p]));
+    const loaded = initialPlan.picks.flatMap(({ id, note }) => {
+      const mon = byId.get(id);
+      return mon ? [{ pokemon: mon, note: note ?? "" }] : [];
+    });
+    setSlots(loaded);
+  }, [initialPlan, pokemon]);
+
   // ── Load team from URL on mount ──
   useEffect(() => {
+    if (initialPlan) return;
     const params = new URLSearchParams(window.location.search);
     const encoded = params.get("team");
     if (encoded) {
@@ -920,6 +1048,11 @@ export function DraftWorkspace({ pokemon, budget, seasonName }: { pokemon: Pokem
             onClear={() => setSlots([])}
             budget={budget}
             seasonName={seasonName}
+            planPanel={
+              planContext ? (
+                <PlanPanel slots={slots} context={planContext} loaded={loadedPlan} onLoadedChange={setLoadedPlan} />
+              ) : undefined
+            }
           />
         </div>
       </aside>

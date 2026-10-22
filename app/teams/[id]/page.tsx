@@ -8,11 +8,13 @@ import { PokemonCard } from "@/components/pokemon-card";
 import { AceButton } from "@/components/ace-button";
 import { TypeBadge } from "@/components/type-badge";
 import { Card } from "@/components/ui/card";
-import { getRoster, getSchedule, getStats, getTeam, getTeams } from "@/lib/data";
+import { getActiveSeason, getPokemon, getRoster, getSchedule, getStats, getTeam, getTeams } from "@/lib/data";
 import { updateCoachBio, updateCoachName, updateTeamName } from "@/lib/actions";
 import { initials } from "@/lib/utils";
 import { pickAce } from "@/lib/ace";
 import { canEditTeam, getCurrentUser } from "@/lib/auth";
+import { TeamPlans, type PlanSummary } from "@/components/team-plans";
+import { getTeamPlans, resolvePicks } from "@/lib/plans";
 import { getDominantTypeColor, hexToRgb, TYPE_COLORS } from "@/lib/team-theme";
 import { pokemonTypesFor } from "@/lib/type-chart";
 import type { Pokemon, PokemonStats, PokemonType, Team } from "@/lib/types";
@@ -39,6 +41,29 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
   ]);
   // Coaches can edit their own team; admins and the owner can edit any team
   const canEdit = canEditTeam(user, team.coachId);
+
+  // ── Private draft plans (own team, admins, owner) ───────────────────────────
+  let planSummaries: PlanSummary[] = [];
+  let planBudget = 105;
+  let planSeasonName: string | undefined;
+  if (canEdit) {
+    const [plans, allPokemon, season] = await Promise.all([getTeamPlans(team.id), getPokemon(), getActiveSeason()]);
+    planBudget = season?.draftBudget ?? 105;
+    planSeasonName = season?.name;
+    planSummaries = plans.map((plan) => {
+      const slots = resolvePicks(plan.picks, allPokemon);
+      return {
+        id: plan.id,
+        name: plan.name,
+        slots,
+        points: slots.reduce((n, s) => n + s.pokemon.pointValue, 0),
+        updatedLabel: new Date(plan.updatedAt).toLocaleDateString("en-US", {
+          month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York",
+        }),
+        createdByName: plan.createdByName,
+      };
+    });
+  }
 
   const pokemon = roster
     .map((s) => s.pokemon)
@@ -417,6 +442,17 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
             </div>
           )}
         </section>
+
+        {/* ── Private: draft plans ───────────────────────────────────────── */}
+        {canEdit && (
+          <TeamPlans
+            teamId={team.id}
+            plans={planSummaries}
+            budget={planBudget}
+            seasonName={planSeasonName}
+            accent={color}
+          />
+        )}
 
         {/* ── Manage team (own team, admins and owner only) ───────────────── */}
         {canEdit && (
