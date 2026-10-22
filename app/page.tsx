@@ -19,8 +19,10 @@ export default async function HomePage() {
   // Get top Pokémon per team (highest point value)
   const rostersRaw = await Promise.all(teams.map((t) => getRoster(t.id)));
   const topPokemonMap: Record<string, Pokemon> = {};
+  const rosterMap: Record<string, Pokemon[]> = {};
   teams.forEach((team, i) => {
     const slots = rostersRaw[i];
+    rosterMap[team.id] = slots.flatMap((s) => (s.pokemon ? [s.pokemon] : []));
     const top = slots
       .filter((s) => s.pokemon)
       .sort((a, b) => (b.pokemon?.pointValue ?? 0) - (a.pokemon?.pointValue ?? 0))[0];
@@ -165,11 +167,14 @@ export default async function HomePage() {
       <section className="space-y-4">
         <h2 className="text-2xl font-black theme-accent">Teams</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {sorted.map((team) => (
+          {sorted.map((team, idx) => (
             <TeamCard
               key={team.id}
               team={team}
               topPokemon={topPokemonMap[team.id]}
+              roster={rosterMap[team.id]}
+              rank={idx + 1}
+              diff={battleDiffMap[team.id] ?? 0}
             />
           ))}
         </div>
