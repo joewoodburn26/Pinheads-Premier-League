@@ -173,10 +173,11 @@ function PokemonSelectorModal({
 // ── Single Pokémon slot cell ──────────────────────────────────────────────────
 
 function PokemonSlotCell({
-  slot, allPokemon, isDragOver, onDragStart, onDragOver, onDragEnd, onDrop,
+  slot, allPokemon, isDragOver, onDragStart, onDragOver, onDragEnd, onDrop, readOnly = false,
 }: {
   slot: TeamPokemon & { pokemon?: Pokemon };
   allPokemon: Pokemon[];
+  readOnly?: boolean;
   isDragOver: boolean;
   onDragStart: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -185,16 +186,33 @@ function PokemonSlotCell({
 }) {
   const [isPending, startTransition] = useTransition();
   const [showSelector, setShowSelector] = useState(false);
+  const [error, setError] = useState("");
   const pokemon = slot.pokemon;
 
   function handleRemove() {
     if (!confirm(`Remove ${pokemon?.name ?? "this Pokémon"} from the roster?`)) return;
-    startTransition(async () => { await removeFromRoster(slot.id); });
+    setError("");
+    startTransition(async () => {
+      try {
+        const result = await removeFromRoster(slot.id);
+        if (!result.success) setError(result.error ?? "Couldn't remove it.");
+      } catch {
+        setError("Couldn't remove it. Try again.");
+      }
+    });
   }
 
   function handleReplace(selected: Pokemon) {
     setShowSelector(false);
-    startTransition(async () => { await replaceInRoster(slot.id, selected.id); });
+    setError("");
+    startTransition(async () => {
+      try {
+        const result = await replaceInRoster(slot.id, selected.id);
+        if (!result.success) setError(result.error ?? "Couldn't replace it.");
+      } catch {
+        setError("Couldn't replace it. Try again.");
+      }
+    });
   }
 
   if (!pokemon) return null;
@@ -203,29 +221,34 @@ function PokemonSlotCell({
   return (
     <>
       <div
-        draggable
-        onDragStart={onDragStart}
-        onDragOver={onDragOver}
-        onDragEnd={onDragEnd}
-        onDrop={onDrop}
-        className={`relative flex flex-col items-center gap-1 rounded-lg border bg-card p-3 text-center h-full transition-all cursor-grab active:cursor-grabbing select-none
+        draggable={!readOnly}
+        onDragStart={readOnly ? undefined : onDragStart}
+        onDragOver={readOnly ? undefined : onDragOver}
+        onDragEnd={readOnly ? undefined : onDragEnd}
+        onDrop={readOnly ? undefined : onDrop}
+        className={`relative flex flex-col items-center gap-1 rounded-lg border bg-card p-3 text-center h-full transition-all select-none ${readOnly ? "" : "cursor-grab active:cursor-grabbing"}
           ${isPending ? "opacity-50" : ""}
           ${isDragOver ? "border-primary border-2 bg-primary/10 scale-105" : "hover:border-primary/40"}
         `}
       >
-        <div className="absolute top-1 left-1 text-muted-foreground/40 text-xs select-none">⠿</div>
-        <div className="absolute top-1 right-1 flex gap-1">
-          <button onClick={() => setShowSelector(true)} title="Replace Pokémon"
-            className="rounded bg-muted px-1.5 py-0.5 text-xs hover:bg-primary hover:text-primary-foreground transition-colors">↔</button>
-          <button onClick={handleRemove} title="Remove Pokémon"
-            className="rounded bg-muted px-1.5 py-0.5 text-xs hover:bg-destructive hover:text-destructive-foreground transition-colors">✕</button>
-        </div>
+        {!readOnly && (
+          <>
+            <div className="absolute top-1 left-1 text-muted-foreground/40 text-xs select-none">⠿</div>
+            <div className="absolute top-1 right-1 flex gap-1">
+              <button onClick={() => setShowSelector(true)} title="Replace Pokémon"
+                className="rounded bg-muted px-1.5 py-0.5 text-xs hover:bg-primary hover:text-primary-foreground transition-colors">↔</button>
+              <button onClick={handleRemove} title="Remove Pokémon"
+                className="rounded bg-muted px-1.5 py-0.5 text-xs hover:bg-destructive hover:text-destructive-foreground transition-colors">✕</button>
+            </div>
+          </>
+        )}
         <Image src={pokemon.spriteUrl} alt={pokemon.name} width={96} height={96} draggable={false} className="pointer-events-none size-20 object-contain mt-2" />
         <p className="text-sm font-semibold leading-tight">{pokemon.name}</p>
         <div className="flex flex-wrap justify-center gap-0.5">
           {types.map((t) => <TypeBadge key={t} type={t} />)}
         </div>
         <p className="mt-auto pt-2 text-lg font-black text-foreground">{pokemon.pointValue} pts</p>
+        {error && <p className="text-[10px] leading-tight text-red-400">{error}</p>}
       </div>
       {showSelector && (
         <PokemonSelectorModal allPokemon={allPokemon} onSelect={handleReplace} onClose={() => setShowSelector(false)} />
@@ -237,9 +260,10 @@ function PokemonSlotCell({
 // ── Empty slot cell ───────────────────────────────────────────────────────────
 
 function EmptySlotCell({
-  teamId, seasonId, allPokemon, isDragOver, onDragOver, onDrop,
+  teamId, seasonId, allPokemon, isDragOver, onDragOver, onDrop, readOnly = false,
 }: {
   teamId: string; seasonId: string; allPokemon: Pokemon[];
+  readOnly?: boolean;
   isDragOver: boolean;
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
@@ -247,9 +271,27 @@ function EmptySlotCell({
   const [isPending, startTransition] = useTransition();
   const [showSelector, setShowSelector] = useState(false);
 
+  const [error, setError] = useState("");
+
   function handleAdd(selected: Pokemon) {
     setShowSelector(false);
-    startTransition(async () => { await addToRoster(teamId, seasonId, selected.id); });
+    setError("");
+    startTransition(async () => {
+      try {
+        const result = await addToRoster(teamId, seasonId, selected.id);
+        if (!result.success) setError(result.error ?? "Couldn't add it.");
+      } catch {
+        setError("Couldn't add it. Try again.");
+      }
+    });
+  }
+
+  if (readOnly) {
+    return (
+      <div className="flex h-full min-h-[180px] w-full items-center justify-center rounded-lg border border-dashed bg-muted/20 text-xs text-muted-foreground">
+        Empty slot
+      </div>
+    );
   }
 
   return (
@@ -264,6 +306,7 @@ function EmptySlotCell({
           className="flex h-full min-h-[180px] w-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
           <span className="text-2xl">+</span>
           <span>Add Pokémon</span>
+          {error && <span className="px-2 text-[10px] leading-tight text-red-400">{error}</span>}
         </button>
       </div>
       {showSelector && (
@@ -276,13 +319,15 @@ function EmptySlotCell({
 // ── Team roster editor ────────────────────────────────────────────────────────
 
 export function TeamRosterEditor({
-  teamId, seasonId, slots, allPokemon, rosterSize = 10,
+  teamId, seasonId, slots, allPokemon, rosterSize = 10, readOnly = false,
 }: {
   teamId: string;
   seasonId: string;
   slots: (TeamPokemon & { pokemon?: Pokemon })[];
   allPokemon: Pokemon[];
   rosterSize?: number;
+  /** View-only for members who can't edit this team */
+  readOnly?: boolean;
 }) {
   // Sync local slots with incoming prop whenever server data refreshes
   const [localSlots, setLocalSlots] = useState(slots);
@@ -363,7 +408,7 @@ export function TeamRosterEditor({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">⠿ Drag cards to reorder</p>
+      {!readOnly && <p className="text-xs text-muted-foreground">⠿ Drag cards to reorder</p>}
       {orderError && <p className="text-xs text-red-400">{orderError}</p>}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 lg:grid-cols-10">
         {padded.map((slot, idx) =>
@@ -372,6 +417,7 @@ export function TeamRosterEditor({
               key={slot.id}
               slot={slot}
               allPokemon={allPokemon}
+              readOnly={readOnly}
               isDragOver={dragOverIndex === idx}
               onDragStart={(e) => handleDragStart(e, idx)}
               onDragOver={(e) => handleDragOver(e, idx)}
@@ -384,6 +430,7 @@ export function TeamRosterEditor({
               teamId={teamId}
               seasonId={seasonId}
               allPokemon={allPokemon}
+              readOnly={readOnly}
               isDragOver={dragOverIndex === idx}
               onDragOver={(e) => handleDragOver(e, idx)}
               onDrop={(e) => handleDrop(e, idx)}

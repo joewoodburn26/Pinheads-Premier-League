@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireCoachEditor, requireSignedIn, requireTeamEditor } from "@/lib/auth";
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -97,6 +97,7 @@ export async function updatePokemonCost(pokemonId: string, pointValue: number, s
 }
 
 export async function updateTeamName(teamId: string, formData: FormData) {
+  await requireTeamEditor(teamId);
   if (!hasSupabaseEnv()) return;
   const teamName = z.string().min(1).parse(formData.get("teamName"));
   await createSupabaseAdminClient().from("teams").update({ team_name: teamName }).eq("id", teamId);
@@ -104,6 +105,7 @@ export async function updateTeamName(teamId: string, formData: FormData) {
 }
 
 export async function updateCoachName(coachId: string, teamId: string, formData: FormData) {
+  await requireCoachEditor(coachId);
   if (!hasSupabaseEnv()) return;
   const name = z.string().min(1).parse(formData.get("coachName"));
   await createSupabaseAdminClient().from("coaches").update({ name }).eq("id", coachId);
@@ -111,6 +113,7 @@ export async function updateCoachName(coachId: string, teamId: string, formData:
 }
 
 export async function updateCoachBio(coachId: string, teamId: string, formData: FormData) {
+  await requireCoachEditor(coachId);
   if (!hasSupabaseEnv()) return;
   const bio = z.string().parse(formData.get("bio"));
   await createSupabaseAdminClient().from("coaches").update({ bio }).eq("id", coachId);
@@ -118,6 +121,7 @@ export async function updateCoachBio(coachId: string, teamId: string, formData: 
 }
 
 export async function updateMatch(formData: FormData) {
+  await requireSignedIn();
   if (!hasSupabaseEnv()) return;
   const id       = z.string().min(1).parse(formData.get("id"));
   const winner   = (formData.get("winner") as string) || null;
@@ -192,6 +196,7 @@ export async function updateRules(formData: FormData) {
 export async function setTeamAce(teamId: string, pokemonId: string | null) {
   z.string().min(1).parse(teamId);
   if (pokemonId !== null) z.string().min(1).parse(pokemonId);
+  await requireTeamEditor(teamId);
   if (!hasSupabaseEnv()) throw new Error("Supabase is not configured, so the ace can't be saved.");
 
   const supabase = createSupabaseAdminClient();

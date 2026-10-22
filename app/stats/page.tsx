@@ -1,13 +1,15 @@
 import { getActiveSeason, getTeams, getStats, getRoster } from "@/lib/data";
 import { StatsClient } from "@/components/stats-client";
+import { canReport, getCurrentUser, isOwner } from "@/lib/auth";
 
 export const revalidate = 0;
 
 export default async function StatsPage() {
   const season = await getActiveSeason();
-  const [teams, rawStats] = await Promise.all([
+  const [teams, rawStats, user] = await Promise.all([
     getTeams(season.id),
     getStats(season.id),
+    getCurrentUser(),
   ]);
 
   const teamNameMap = Object.fromEntries(teams.map(t => [t.id, t.teamName]));
@@ -45,5 +47,12 @@ export default async function StatsPage() {
     }
   }
 
-  return <StatsClient stats={stats} seasonId={season.id} />;
+  return (
+    <StatsClient
+      stats={stats}
+      seasonId={season.id}
+      canEdit={canReport(user)}
+      canResetAll={canReport(user) && isOwner(user)}
+    />
+  );
 }

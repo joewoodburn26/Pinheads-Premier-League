@@ -1,5 +1,7 @@
 "use server";
 
+import { denied, requireOwner, requireSignedIn } from "@/lib/auth";
+
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/server";
@@ -27,6 +29,8 @@ export async function parseAndSaveReplayStats(
   awayTeamId: string,
 ): Promise<ParseReplayResult> {
   if (!replayUrl?.trim()) return { ok: false, error: "No replay URL provided" };
+  const blocked = await denied(requireSignedIn);
+  if (blocked) return { ok: false, error: blocked };
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase not configured" };
 
   const supabase = createSupabaseAdminClient();
@@ -128,6 +132,8 @@ export async function resetReplayStats(
   awayTeamId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase not configured" };
+  const blocked = await denied(requireSignedIn);
+  if (blocked) return { ok: false, error: blocked };
   const supabase = createSupabaseAdminClient();
 
   try {
@@ -189,6 +195,8 @@ export async function resetReplayStats(
 
 export async function resetAllStats(seasonId: string): Promise<{ ok: boolean; error?: string }> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase not configured" };
+  const blocked = await denied(requireOwner);
+  if (blocked) return { ok: false, error: blocked };
   const supabase = createSupabaseAdminClient();
   await supabase.from("pokemon_stats").delete().eq("season_id", seasonId);
   await supabase.from("replay_imports").delete().eq("season_id", seasonId);
@@ -207,6 +215,7 @@ export async function updatePokemonStats(
   extra?: { seasonId: string; teamId: string; pokemonId: string },
 ): Promise<{ ok: boolean }> {
   if (!hasSupabaseEnv()) return { ok: false };
+  if (await denied(requireSignedIn)) return { ok: false };
   const supabase = createSupabaseAdminClient();
 
   if (statId.startsWith("placeholder-") && extra) {

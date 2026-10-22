@@ -116,3 +116,54 @@ export async function listMembers(): Promise<Member[]> {
     .order("created_at", { ascending: true });
   return (data ?? []).map(mapProfile);
 }
+
+// ─── Team-level permissions ──────────────────────────────────────────────────
+
+/** Signed in, past the starting password: can report results, fix stats, etc. */
+export function canReport(user: CurrentUser | null | undefined): boolean {
+  return !!user && !user.mustChangePassword;
+}
+
+/** Admins edit every team; coaches edit the team whose coach they're linked to. */
+export function canEditTeam(user: CurrentUser | null | undefined, teamCoachId: string | null | undefined): boolean {
+  if (!canReport(user)) return false;
+  if (isAdmin(user)) return true;
+  return !!user!.coachId && user!.coachId === teamCoachId;
+}
+
+/** Throws unless the signed-in member may edit this coach's profile (name, bio, photo). */
+export async function requireCoachEditor(coachId: string): Promise<CurrentUser> {
+  const user = await requireSignedIn();
+  if (isAdmin(user) || (user.coachId && user.coachId === coachId)) return user;
+  throw new Error("You can only change your own team.");
+}
+
+/** Throws unless the signed-in member may edit this team. */
+export async function requireTeamEditor(teamId: string): Promise<CurrentUser> {
+  const user = await requireSignedIn();
+  if (isAdmin(user)) return user;
+  if (!authEnabled()) return user;
+  const { data } = await createSupabaseAdminClient().from("teams").select("coach_id").eq("id", teamId).maybeSingle();
+  if (data && user.coachId && data.coach_id === user.coachId) return user;
+  throw new Error("You can only change your own team.");
+}
+
+/** Throws unless the signed-in member may edit the team that owns these roster slots. */
+export async function requireSlotEditor(slotIds: string[]): Promise<CurrentUser> {
+  const user = await requireSignedIn();
+  if (isAdmin(user) || !authEnabled() || slotIds.length === 0) return user;
+  const { data } = await createSupabaseAdminClient().from("team_pokemon").select("team_id").in("id", slotIds);
+  const teamIds = [...new Set((data ?? []).map((r) => r.team_id as string))];
+  if (teamIds.length !== 1) throw new Error("You can only change your own team.");
+  return requireTeamEditor(teamIds[0]);
+}
+
+/** For actions that return { ok, error } instead of throwing: null if allowed, else the reason. */
+export async function denied(check: () => Promise<unknown>): Promise<string | null> {
+  try {
+    await check();
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : "Not allowed.";
+  }
+}

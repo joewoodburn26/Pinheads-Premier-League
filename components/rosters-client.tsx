@@ -11,12 +11,16 @@ interface RosterData {
 }
 
 export function RostersClient({
-  initialRosters, seasonId, allPokemon, rosterSize = 10,
+  initialRosters, seasonId, allPokemon, rosterSize = 10, editableTeamIds = [], canReorderTeams = false,
 }: {
   initialRosters: RosterData[];
   seasonId: string;
   allPokemon: Pokemon[];
   rosterSize?: number;
+  /** Teams the signed-in member may edit (own team, or all for admins) */
+  editableTeamIds?: string[];
+  /** Draft order is admins only */
+  canReorderTeams?: boolean;
 }) {
   const [rosters, setRosters] = useState(initialRosters);
   const availablePokemon = allPokemon.filter(p => !p.banned);
@@ -34,7 +38,7 @@ export function RostersClient({
 
   return (
     <div className="space-y-8">
-      <DraftOrderCards teams={rosters.map(r => r.team)} onReorder={handleReorder} />
+      <DraftOrderCards teams={rosters.map(r => r.team)} onReorder={handleReorder} locked={!canReorderTeams} />
 
       {rosters.map(({ team, slots }) => (
         <section key={team.id} className="space-y-3">
@@ -46,6 +50,7 @@ export function RostersClient({
             slots={slots}
             allPokemon={availablePokemon}
             rosterSize={rosterSize}
+            readOnly={!editableTeamIds.includes(team.id)}
           />
         </section>
       ))}

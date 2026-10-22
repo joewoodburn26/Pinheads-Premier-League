@@ -12,6 +12,7 @@ import { getRoster, getSchedule, getStats, getTeam, getTeams } from "@/lib/data"
 import { updateCoachBio, updateCoachName, updateTeamName } from "@/lib/actions";
 import { initials } from "@/lib/utils";
 import { pickAce } from "@/lib/ace";
+import { canEditTeam, getCurrentUser } from "@/lib/auth";
 import { getDominantTypeColor, hexToRgb, TYPE_COLORS } from "@/lib/team-theme";
 import { pokemonTypesFor } from "@/lib/type-chart";
 import type { Pokemon, PokemonStats, PokemonType, Team } from "@/lib/types";
@@ -29,12 +30,15 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
   const team = await getTeam(id);
   if (!team) notFound();
 
-  const [roster, allTeams, matches, allStats] = await Promise.all([
+  const [roster, allTeams, matches, allStats, user] = await Promise.all([
     getRoster(team.id),
     getTeams(team.seasonId),
     getSchedule(team.seasonId),
     getStats(team.seasonId),
+    getCurrentUser(),
   ]);
+  // Coaches can edit their own team; admins and the owner can edit any team
+  const canEdit = canEditTeam(user, team.coachId);
 
   const pokemon = roster
     .map((s) => s.pokemon)
@@ -385,7 +389,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
           <div className="flex items-baseline justify-between gap-3">
             <h2 className="text-2xl font-black" style={{ color }}>Roster</h2>
             <p className="text-sm text-muted-foreground">
-              {pokemon.length} Pokémon · {totalPoints} pts · tap ☆ to choose your ace
+              {pokemon.length} Pokémon · {totalPoints} pts{canEdit ? " · tap ☆ to choose your ace" : ""}
             </p>
           </div>
           {pokemon.length === 0 ? (
@@ -399,12 +403,14 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
                   stats={statsByPokemon.get(p.id)}
                   ace={ace?.id === p.id ? (aceIsChosen ? "chosen" : "auto") : undefined}
                   aceControl={
-                    <AceButton
-                      teamId={team.id}
-                      pokemonId={p.id}
-                      pokemonName={p.name}
-                      isChosenAce={team.acePokemonId === p.id}
-                    />
+                    canEdit ? (
+                      <AceButton
+                        teamId={team.id}
+                        pokemonId={p.id}
+                        pokemonName={p.name}
+                        isChosenAce={team.acePokemonId === p.id}
+                      />
+                    ) : undefined
                   }
                 />
               ))}
@@ -412,7 +418,8 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
           )}
         </section>
 
-        {/* ── Manage team (collapsed by default) ──────────────────────────── */}
+        {/* ── Manage team (own team, admins and owner only) ───────────────── */}
+        {canEdit && (
         <details className="group rounded-xl border bg-card/50" style={{ borderColor: `rgba(${rgb1}, 0.2)` }}>
           <summary className="flex cursor-pointer list-none items-center gap-2 px-5 py-4 text-sm font-bold text-muted-foreground hover:text-foreground">
             <Settings2 size={16} /> Manage Team
@@ -449,6 +456,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
             </div>
           </div>
         </details>
+        )}
       </div>
     </>
   );

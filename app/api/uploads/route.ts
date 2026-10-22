@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/server";
+import { denied, requireCoachEditor, requireTeamEditor } from "@/lib/auth";
 
 const uploadSchema = z.object({
   targetId: z.string().min(1),
@@ -25,6 +26,11 @@ export async function POST(request: Request) {
     });
     if (!parsed.success) return fail("Missing team/coach id — assign a coach to this team first.");
     const input = parsed.data;
+
+    const blocked = await denied(() =>
+      input.kind === "team-logo" ? requireTeamEditor(input.targetId) : requireCoachEditor(input.targetId)
+    );
+    if (blocked) return fail(blocked, 403);
 
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) return fail("No file uploaded.");

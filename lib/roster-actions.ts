@@ -1,5 +1,7 @@
 "use server";
 
+import { denied, requireSlotEditor, requireTeamEditor } from "@/lib/auth";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { hasSupabaseEnv } from "@/lib/supabase/server";
@@ -8,6 +10,8 @@ import { teamPokemon } from "@/lib/mock-data";
 
 // ── Remove a Pokémon slot from a roster ──────────────────────────────────────
 export async function removeFromRoster(slotId: string) {
+  const blocked = await denied(() => requireSlotEditor([slotId]));
+  if (blocked) return { success: false, error: blocked };
   if (!hasSupabaseEnv()) {
     const idx = teamPokemon.findIndex((s) => s.id === slotId);
     if (idx !== -1) teamPokemon.splice(idx, 1);
@@ -33,6 +37,8 @@ export async function removeFromRoster(slotId: string) {
 export async function replaceInRoster(slotId: string, newPokemonId: string) {
   z.string().min(1).parse(slotId);
   z.string().min(1).parse(newPokemonId);
+  const blocked = await denied(() => requireSlotEditor([slotId]));
+  if (blocked) return { success: false, error: blocked };
 
   if (!hasSupabaseEnv()) {
     const slot = teamPokemon.find((s) => s.id === slotId);
@@ -60,6 +66,8 @@ export async function addToRoster(teamId: string, seasonId: string, pokemonId: s
   z.string().min(1).parse(teamId);
   z.string().min(1).parse(seasonId);
   z.string().min(1).parse(pokemonId);
+  const blocked = await denied(() => requireTeamEditor(teamId));
+  if (blocked) return { success: false, error: blocked };
 
   if (!hasSupabaseEnv()) {
     teamPokemon.push({
@@ -99,6 +107,8 @@ export async function addToRoster(teamId: string, seasonId: string, pokemonId: s
 // ── Reorder roster slots ──────────────────────────────────────────────────────
 // orderedIds: array of slot IDs in the new desired order
 export async function reorderRoster(orderedIds: string[]) {
+  const blocked = await denied(() => requireSlotEditor(orderedIds));
+  if (blocked) return { success: false, error: blocked };
   if (!hasSupabaseEnv()) {
     revalidatePath("/rosters");
     return { success: true };

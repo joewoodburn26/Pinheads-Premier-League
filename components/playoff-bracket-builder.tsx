@@ -58,8 +58,9 @@ function MiniStandings({ standings }: { standings: StandingRow[] }) {
 // ─── Slot drop target ──────────────────────────────────────────────────────────
 
 function SlotDropTarget({
-  label, teamId, teamName, placeholder, onDrop, onClear,
+  label, teamId, teamName, placeholder, onDrop, onClear, locked = false,
 }: {
+  locked?: boolean;
   label: string;
   teamId: string | null;
   teamName: string;
@@ -71,9 +72,9 @@ function SlotDropTarget({
 
   return (
     <div
-      onDragOver={e => { e.preventDefault(); setIsOver(true); }}
-      onDragLeave={() => setIsOver(false)}
-      onDrop={e => {
+      onDragOver={locked ? undefined : e => { e.preventDefault(); setIsOver(true); }}
+      onDragLeave={locked ? undefined : () => setIsOver(false)}
+      onDrop={locked ? undefined : e => {
         e.preventDefault();
         setIsOver(false);
         const dropped = e.dataTransfer.getData(DRAG_TYPE);
@@ -86,9 +87,9 @@ function SlotDropTarget({
     >
       <span className="text-xs text-muted-foreground w-5 shrink-0">{label}</span>
       <span className={`flex-1 font-semibold truncate ${teamId ? "" : "text-muted-foreground italic text-xs"}`}>
-        {teamId ? teamName : (placeholder ?? "Drop team here")}
+        {teamId ? teamName : (placeholder ?? (locked ? "TBD" : "Drop team here"))}
       </span>
-      {teamId && (
+      {teamId && !locked && (
         <button onClick={onClear} className="shrink-0 text-muted-foreground hover:text-destructive transition-colors">
           <X size={14} />
         </button>
@@ -114,6 +115,7 @@ function MatchResultForm({
   const [r2, setR2] = useState(match.replay2 ?? "");
   const [r3, setR3] = useState(match.replay3 ?? "");
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
 
   function handleDiff1Change(val: string) {
     setDiff1(val);
@@ -137,10 +139,16 @@ function MatchResultForm({
     fd.set("replay1", r1);
     fd.set("replay2", r2);
     fd.set("replay3", r3);
+    setError("");
     startTransition(async () => {
-      await updatePlayoffMatch(fd);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 1500);
+      try {
+        const result = await updatePlayoffMatch(fd);
+        if (!result.ok) return setError("error" in result && result.error ? result.error : "Couldn't save the result.");
+        setSaved(true);
+        setTimeout(() => setSaved(false), 1500);
+      } catch {
+        setError("Couldn't save the result. Try again.");
+      }
     });
   }
 
@@ -202,6 +210,7 @@ function MatchResultForm({
           {isPending ? "Saving…" : "Save Result"}
         </Button>
         <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground">Close</button>
+        {error && <span className="text-xs text-red-400">{error}</span>}
         {saved && <span className="text-xs text-green-400 font-semibold">✓ Saved</span>}
       </div>
     </div>
@@ -212,8 +221,10 @@ function MatchResultForm({
 
 function BracketSlotCard({
   round, slotIndex, team1, team2, match, seasonId, placeholder1, placeholder2,
-  onAssign, onClear,
+  onAssign, onClear, canSetup, canReport,
 }: {
+  canSetup: boolean;
+  canReport: boolean;
   round: number; slotIndex: number;
   team1: { id: string | null; name: string };
   team2: { id: string | null; name: string };
@@ -229,15 +240,20 @@ function BracketSlotCard({
 
   return (
     <Card className={`p-3 space-y-2 ${match?.winner ? "border-primary/30" : ""}`}>
-      <SlotDropTarget label="1" teamId={team1.id} teamName={team1.name} placeholder={placeholder1}
+      <SlotDropTarget label="1" locked={!canSetup} teamId={team1.id} teamName={team1.name} placeholder={placeholder1}
         onDrop={tid => onAssign(round, slotIndex, 1, tid)}
         onClear={() => onClear(round, slotIndex, 1)} />
       <p className="text-center text-xs text-muted-foreground">vs</p>
-      <SlotDropTarget label="2" teamId={team2.id} teamName={team2.name} placeholder={placeholder2}
+      <SlotDropTarget label="2" locked={!canSetup} teamId={team2.id} teamName={team2.name} placeholder={placeholder2}
         onDrop={tid => onAssign(round, slotIndex, 2, tid)}
         onClear={() => onClear(round, slotIndex, 2)} />
 
-      {bothFilled && match && (
+      {bothFilled && match && !canReport && match.winner && (
+        <p className="pt-1 text-center text-xs font-bold text-primary">
+          {match.winner === match.team1Id ? team1.name : team2.name} won {match.bo3Score}
+        </p>
+      )}
+      {bothFilled && match && canReport && (
         <div className="pt-1">
           {match.winner ? (
             <button onClick={() => setShowForm(s => !s)}
@@ -262,8 +278,12 @@ function BracketSlotCard({
 // ─── Main bracket builder ──────────────────────────────────────────────────────
 
 export function PlayoffBracketBuilder({
-  standings, playoffMatches, seasonId, teamNameMap,
+  standings, playoffMatches, seasonId, teamNameMap, canSetup = false, canReport = false,
 }: {
+  /** Admins and the owner arrange the bracket */
+  canSetup?: boolean;
+  /** Signed-in members enter results */
+  canReport?: boolean;
   standings: StandingRow[];
   playoffMatches: PlayoffMatch[];
   seasonId: string;
@@ -271,6 +291,7 @@ export function PlayoffBracketBuilder({
 }) {
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const structure = getBracketStructure(standings.length);
   const seeding   = getBracketSeeding(standings.length);
@@ -353,10 +374,16 @@ export function PlayoffBracketBuilder({
         });
       }
     }
+    setSaveError("");
     startTransition(async () => {
-      await saveBracketSlots(seasonId, toSave);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      try {
+        const result = await saveBracketSlots(seasonId, toSave);
+        if (!result.ok) return setSaveError("error" in result && result.error ? result.error : "Couldn't save the bracket.");
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } catch {
+        setSaveError("Couldn't save the bracket. Try again.");
+      }
     });
   }
 
@@ -396,6 +423,8 @@ export function PlayoffBracketBuilder({
         placeholder2={placeholder2}
         onAssign={handleAssign}
         onClear={handleClear}
+        canSetup={canSetup}
+        canReport={canReport}
       />
     );
   }
@@ -413,11 +442,11 @@ export function PlayoffBracketBuilder({
       <div>
         <h2 className="text-2xl font-black">Playoffs</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Drag teams from standings into bracket slots · Single elimination · Bo3 all rounds
+          {canSetup ? "Drag teams from standings into bracket slots · " : ""}Single elimination · Bo3 all rounds
         </p>
       </div>
 
-      <MiniStandings standings={standings} />
+      {canSetup && <MiniStandings standings={standings} />}
 
       {/* Play-In round (if present) — shown above the main bracket */}
       {playInRound && (
@@ -490,13 +519,21 @@ export function PlayoffBracketBuilder({
         </div>
       </div>
 
-      <div className="flex items-center gap-3 sticky bottom-4">
-        <Button onClick={handleSave} disabled={isPending} className="text-base px-6 py-3">
-          <Save size={16} className="mr-2" />
-          {isPending ? "Saving Bracket…" : "Save Bracket"}
-        </Button>
-        {saved && <span className="text-sm text-green-400 font-semibold">✓ Bracket saved</span>}
-      </div>
+      {canSetup && (
+        <div className="flex items-center gap-3 sticky bottom-4">
+          <Button onClick={handleSave} disabled={isPending} className="text-base px-6 py-3">
+            <Save size={16} className="mr-2" />
+            {isPending ? "Saving Bracket…" : "Save Bracket"}
+          </Button>
+          {saved && <span className="text-sm text-green-400 font-semibold">✓ Bracket saved</span>}
+          {saveError && <span className="text-sm text-red-400">{saveError}</span>}
+        </div>
+      )}
+      {!canReport && (
+        <a href="/login?next=/schedule" className="text-xs text-muted-foreground underline hover:text-foreground">
+          Sign in to report results
+        </a>
+      )}
     </div>
   );
 }

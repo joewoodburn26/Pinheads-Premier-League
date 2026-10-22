@@ -1,5 +1,7 @@
 "use server";
 
+import { denied, requireAdmin, requireSignedIn } from "@/lib/auth";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { hasSupabaseEnv } from "@/lib/supabase/server";
@@ -19,6 +21,8 @@ export async function saveBracketSlots(seasonId: string, slots: {
   round: number; roundName: string; slotIndex: number;
   team1Id: string | null; team2Id: string | null;
 }[]) {
+  const blocked = await denied(requireAdmin);
+  if (blocked) return { ok: false, error: blocked };
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase not configured" };
   const supabase = createSupabaseAdminClient();
   const parsed = slots.map(s => slotSchema.parse(s));
@@ -64,6 +68,8 @@ export async function saveBracketSlots(seasonId: string, slots: {
 // ─── Update a single playoff match result ────────────────────────────────────
 
 export async function updatePlayoffMatch(formData: FormData) {
+  const blocked = await denied(requireSignedIn);
+  if (blocked) return { ok: false, error: blocked };
   if (!hasSupabaseEnv()) return { ok: false };
   const id        = z.string().min(1).parse(formData.get("id"));
   const winner    = (formData.get("winner") as string) || null;

@@ -13,27 +13,34 @@ interface StatsRow extends PokemonStats {
   teamName: string;
 }
 
-function EditableStatRow({ row }: { row: StatsRow }) {
+function EditableStatRow({ row, canEdit }: { row: StatsRow; canEdit: boolean }) {
   const [isPending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
   const [games,  setGames]  = useState(String(row.gamesPlayed));
   const [kos,    setKos]    = useState(String(row.kos));
   const [deaths, setDeaths] = useState(String(row.deaths));
   const [saved,  setSaved]  = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const isPlaceholder = row.id.startsWith("placeholder-");
 
   function handleSave() {
+    setFailed(false);
     startTransition(async () => {
-      await updatePokemonStats(
-        row.id,
-        parseInt(games) || 0,
-        parseInt(kos) || 0,
-        parseInt(deaths) || 0,
-        isPlaceholder ? { seasonId: row.seasonId, teamId: row.teamId ?? "", pokemonId: row.pokemonId } : undefined,
-      );
-      setSaved(true);
-      setTimeout(() => { setSaved(false); setEditing(false); }, 1000);
+      try {
+        const result = await updatePokemonStats(
+          row.id,
+          parseInt(games) || 0,
+          parseInt(kos) || 0,
+          parseInt(deaths) || 0,
+          isPlaceholder ? { seasonId: row.seasonId, teamId: row.teamId ?? "", pokemonId: row.pokemonId } : undefined,
+        );
+        if (!result.ok) return setFailed(true);
+        setSaved(true);
+        setTimeout(() => { setSaved(false); setEditing(false); }, 1000);
+      } catch {
+        setFailed(true);
+      }
     });
   }
 
@@ -82,8 +89,9 @@ function EditableStatRow({ row }: { row: StatsRow }) {
               <X size={14} />
             </button>
             {saved && <span className="text-xs text-green-400">✓</span>}
+            {failed && <span className="text-xs text-red-400" title="Couldn't save. Make sure you're signed in.">✗</span>}
           </div>
-        ) : (
+        ) : canEdit && (
           <button onClick={() => setEditing(true)}
             className="rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
             <Pencil size={14} />
@@ -97,11 +105,18 @@ function EditableStatRow({ row }: { row: StatsRow }) {
 function ResetAllButton({ seasonId }: { seasonId: string }) {
   const [isPending, startTransition] = useTransition();
   const [confirm, setConfirm] = useState(false);
+  const [error, setError] = useState("");
 
   function handleReset() {
+    setError("");
     startTransition(async () => {
-      await resetAllStats(seasonId);
-      setConfirm(false);
+      try {
+        const result = await resetAllStats(seasonId);
+        if (!result.ok) return setError(result.error ?? "Couldn't reset stats.");
+        setConfirm(false);
+      } catch {
+        setError("Couldn't reset stats. Try again.");
+      }
     });
   }
 
@@ -117,6 +132,7 @@ function ResetAllButton({ seasonId }: { seasonId: string }) {
         <button onClick={() => setConfirm(false)} className="text-muted-foreground hover:text-foreground">
           <X size={16} />
         </button>
+        {error && <span className="text-xs text-red-400">{error}</span>}
       </div>
     );
   }
@@ -129,7 +145,19 @@ function ResetAllButton({ seasonId }: { seasonId: string }) {
   );
 }
 
-export function StatsClient({ stats, seasonId }: { stats: StatsRow[]; seasonId: string }) {
+export function StatsClient({
+  stats,
+  seasonId,
+  canEdit = false,
+  canResetAll = false,
+}: {
+  stats: StatsRow[];
+  seasonId: string;
+  /** Signed-in members can fix individual numbers */
+  canEdit?: boolean;
+  /** Owner only */
+  canResetAll?: boolean;
+}) {
   const [sortKey, setSortKey] = useState<"kos" | "deaths" | "gamesPlayed" | "kd">("kos");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
 
@@ -169,7 +197,7 @@ export function StatsClient({ stats, seasonId }: { stats: StatsRow[]; seasonId: 
             Click <Pencil size={12} className="inline" /> to edit any row · Use ⚡ buttons on Schedule to auto-parse replays
           </p>
         </div>
-        <ResetAllButton seasonId={seasonId} />
+        {canResetAll && <ResetAllButton seasonId={seasonId} />}
       </div>
 
       {stats.length === 0 ? (
@@ -197,11 +225,11 @@ export function StatsClient({ stats, seasonId }: { stats: StatsRow[]; seasonId: 
                   <th className="p-3 text-center">KOs</th>
                   <th className="p-3 text-center">Deaths</th>
                   <th className="p-3 text-center">K/D</th>
-                  <th className="p-3 text-center">Edit</th>
+                  <th className="p-3 text-center">{canEdit ? "Edit" : ""}</th>
                 </tr>
               </thead>
               <tbody>
-                {sorted.map(row => <EditableStatRow key={row.id} row={row} />)}
+                {sorted.map(row => <EditableStatRow key={row.id} row={row} canEdit={canEdit} />)}
               </tbody>
             </table>
           </div>

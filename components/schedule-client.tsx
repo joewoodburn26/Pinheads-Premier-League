@@ -103,11 +103,57 @@ function ByeWeekBanner({ byeTeamName }: { byeTeamName: string }) {
 
 // ─── Match card ───────────────────────────────────────────────────────────────
 
-function MatchCard({ match, teamName, seasonId, parsedReplays }: {
+function SignInToReport() {
+  return (
+    <a href="/login?next=/schedule" className="text-xs text-muted-foreground underline hover:text-foreground">
+      Sign in to report results
+    </a>
+  );
+}
+
+function ReadOnlyMatch({ match, homeName, awayName }: { match: ScheduleMatch; homeName: string; awayName: string }) {
+  const replays = [match.replay1, match.replay2, match.replay3].filter((r): r is string => Boolean(r));
+  const fmt = (n: number | undefined) => (n && n > 0 ? `+${n}` : String(n ?? 0));
+  return (
+    <Card className={`p-4 space-y-3 ${match.winner ? "border-primary/20" : ""}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="font-bold text-base">
+          {homeName}
+          <span className="text-muted-foreground font-normal mx-2">vs</span>
+          {awayName}
+        </span>
+        {match.winner ? (
+          <span className="text-xs font-bold rounded-full bg-primary/10 border border-primary/30 px-2 py-0.5 text-primary shrink-0">
+            {match.winner === match.homeTeam ? homeName : awayName} won {match.bo3Score}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">Not played yet</span>
+        )}
+      </div>
+      {match.winner && (
+        <p className="text-xs text-muted-foreground">
+          Battle diff: {homeName} {fmt(match.homeDiff)} · {awayName} {fmt(match.awayDiff)}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {replays.map((r, i) => (
+          <a key={r} href={r} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1 rounded-md border bg-muted px-2 py-1 text-xs hover:bg-muted/80">
+            <ExternalLink size={12} /> Game {i + 1}
+          </a>
+        ))}
+        <span className="ml-auto"><SignInToReport /></span>
+      </div>
+    </Card>
+  );
+}
+
+function MatchCard({ match, teamName, seasonId, parsedReplays, canReport }: {
   match: ScheduleMatch;
   teamName: (id: string) => string;
   seasonId: string;
   parsedReplays: string[];
+  canReport: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [winner,   setWinner]   = useState(match.winner ?? "");
@@ -118,6 +164,7 @@ function MatchCard({ match, teamName, seasonId, parsedReplays }: {
   const [replay2,  setReplay2]  = useState(match.replay2 ?? "");
   const [replay3,  setReplay3]  = useState(match.replay3 ?? "");
   const [saved,    setSaved]    = useState(false);
+  const [error,    setError]    = useState("");
 
   const homeName = teamName(match.homeTeam);
   const awayName = match.awayTeam === BYE_ID ? "BYE" : teamName(match.awayTeam);
@@ -132,10 +179,15 @@ function MatchCard({ match, teamName, seasonId, parsedReplays }: {
     fd.set("replay1",  replay1);
     fd.set("replay2",  replay2);
     fd.set("replay3",  replay3);
+    setError("");
     startTransition(async () => {
-      await updateMatch(fd);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      try {
+        await updateMatch(fd);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } catch {
+        setError("Couldn't save the result. Make sure you're signed in and try again.");
+      }
     });
   }
 
@@ -144,6 +196,8 @@ function MatchCard({ match, teamName, seasonId, parsedReplays }: {
     const num = parseInt(val);
     if (!isNaN(num)) setAwayDiff(String(-num));
   }
+
+  if (!canReport) return <ReadOnlyMatch match={match} homeName={homeName} awayName={awayName} />;
 
   return (
     <Card className={`p-4 space-y-4 ${match.winner ? "border-primary/20" : ""}`}>
@@ -236,6 +290,7 @@ function MatchCard({ match, teamName, seasonId, parsedReplays }: {
           {isPending ? "Saving…" : "Save Result"}
         </Button>
         {saved && <span className="text-xs text-green-400 font-semibold">✓ Saved</span>}
+        {error && <span className="text-xs text-red-400">{error}</span>}
       </div>
     </Card>
   );
@@ -243,7 +298,8 @@ function MatchCard({ match, teamName, seasonId, parsedReplays }: {
 
 // ─── Week tab ─────────────────────────────────────────────────────────────────
 
-function WeekTab({ week, matches, teamName, standings, seasonId, parsedReplays }: {
+function WeekTab({ week, matches, teamName, standings, seasonId, parsedReplays, canReport }: {
+  canReport: boolean;
   week: number;
   matches: ScheduleMatch[];
   teamName: (id: string) => string;
@@ -284,7 +340,7 @@ function WeekTab({ week, matches, teamName, standings, seasonId, parsedReplays }
       <div className="space-y-4">
         <h2 className="text-xl font-black">Week {week} Matches</h2>
         {realMatches.map(match => (
-          <MatchCard key={match.id} match={match} teamName={teamName} seasonId={seasonId} parsedReplays={parsedReplays} />
+          <MatchCard key={match.id} match={match} teamName={teamName} seasonId={seasonId} parsedReplays={parsedReplays} canReport={canReport} />
         ))}
       </div>
 
@@ -295,13 +351,20 @@ function WeekTab({ week, matches, teamName, standings, seasonId, parsedReplays }
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function ScheduleClient({ matches, teams, initialWeek, playoffMatches, seasonId, parsedReplays }: {
+export function ScheduleClient({
+  matches, teams, initialWeek, playoffMatches, seasonId, parsedReplays,
+  canReport = false, canSetupBracket = false,
+}: {
   matches: ScheduleMatch[];
   teams: Team[];
   initialWeek: number;
   playoffMatches: PlayoffMatch[];
   seasonId: string;
   parsedReplays: string[];
+  /** Signed-in members can enter results, replays and parse stats */
+  canReport?: boolean;
+  /** Admins and the owner can arrange the playoff bracket */
+  canSetupBracket?: boolean;
 }) {
   const realMatches = matches.filter(m => !m.isBye);
   const weeks = [...new Set(matches.map(m => m.week))].sort((a, b) => a - b);
@@ -378,10 +441,12 @@ export function ScheduleClient({ matches, teams, initialWeek, playoffMatches, se
           playoffMatches={playoffMatches}
           seasonId={seasonId}
           teamNameMap={teamNameMap}
+          canSetup={canSetupBracket}
+          canReport={canReport}
         />
       )}
       {typeof activeTab === "number" && (
-        <WeekTab week={activeTab} matches={matches} teamName={teamName} standings={standings} seasonId={seasonId} parsedReplays={parsedReplays} />
+        <WeekTab week={activeTab} matches={matches} teamName={teamName} standings={standings} seasonId={seasonId} parsedReplays={parsedReplays} canReport={canReport} />
       )}
     </div>
   );
