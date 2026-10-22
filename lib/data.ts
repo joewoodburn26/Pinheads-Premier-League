@@ -65,6 +65,7 @@ export async function getTeams(seasonId?: string): Promise<Team[]> {
     wins:       row.wins,
     losses:     row.losses,
     draftOrder: row.draft_order ?? undefined,
+    acePokemonId: row.ace_pokemon_id ?? null,
     coach: row.coach
       ? { id: row.coach.id, name: row.coach.name, imageUrl: row.coach.image_url ?? null, bio: row.coach.bio ?? null }
       : undefined,

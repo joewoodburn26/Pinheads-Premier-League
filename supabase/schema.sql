@@ -26,6 +26,9 @@ create table if not exists teams (
   losses integer not null default 0
 );
 
+-- Coach-chosen ace Pokémon (added later; safe to re-run)
+alter table teams add column if not exists ace_pokemon_id text references pokemon(id) on delete set null;
+
 create table if not exists pokemon (
   id text primary key default gen_random_uuid()::text,
   dex_number integer not null,

@@ -25,6 +25,7 @@ export type Team = {
   wins: number;
   losses: number;
   draftOrder?: number;
+  acePokemonId?: string | null; // coach-chosen ace; falls back to highest points
   coach?: Coach;
 };
 

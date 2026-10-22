@@ -179,3 +179,27 @@ export async function updateRules(formData: FormData) {
   if (error) throw new Error(error.message);
   revalidatePath("/rules");
 }
+
+// Set (or clear with null) a team's ace Pokémon. Must be on the team's roster.
+export async function setTeamAce(teamId: string, pokemonId: string | null) {
+  z.string().min(1).parse(teamId);
+  if (pokemonId !== null) z.string().min(1).parse(pokemonId);
+  if (!hasSupabaseEnv()) throw new Error("Supabase is not configured, so the ace can't be saved.");
+
+  const supabase = createSupabaseAdminClient();
+  if (pokemonId) {
+    const { data: slot } = await supabase
+      .from("team_pokemon")
+      .select("id")
+      .eq("team_id", teamId)
+      .eq("pokemon_id", pokemonId)
+      .maybeSingle();
+    if (!slot) throw new Error("That Pokémon isn't on this team's roster.");
+  }
+
+  const { error } = await supabase.from("teams").update({ ace_pokemon_id: pokemonId }).eq("id", teamId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/");
+  revalidatePath(`/teams/${teamId}`);
+}

@@ -4,6 +4,7 @@ import { TeamCard } from "@/components/team-card";
 import { Card } from "@/components/ui/card";
 import { getActiveSeason, getTeams, getRoster, getStats, getSchedule } from "@/lib/data";
 import { winPct } from "@/lib/utils";
+import { pickAce } from "@/lib/ace";
 import type { Pokemon } from "@/lib/types";
 
 export const revalidate = 0;
@@ -16,17 +17,15 @@ export default async function HomePage() {
     getSchedule(season?.id ?? ""),
   ]);
 
-  // Get top Pokémon per team (highest point value)
+  // Each team's ace: coach's pick, or highest point value as a fallback
   const rostersRaw = await Promise.all(teams.map((t) => getRoster(t.id)));
   const topPokemonMap: Record<string, Pokemon> = {};
   const rosterMap: Record<string, Pokemon[]> = {};
   teams.forEach((team, i) => {
     const slots = rostersRaw[i];
     rosterMap[team.id] = slots.flatMap((s) => (s.pokemon ? [s.pokemon] : []));
-    const top = slots
-      .filter((s) => s.pokemon)
-      .sort((a, b) => (b.pokemon?.pointValue ?? 0) - (a.pokemon?.pointValue ?? 0))[0];
-    if (top?.pokemon) topPokemonMap[team.id] = top.pokemon;
+    const ace = pickAce(team, rosterMap[team.id]);
+    if (ace) topPokemonMap[team.id] = ace;
   });
 
   // Calculate battle differential from schedule matches

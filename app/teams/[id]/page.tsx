@@ -5,11 +5,13 @@ import { Flame, Settings2, Shield, Swords, Trophy, User } from "lucide-react";
 import { InlineEdit } from "@/components/inline-edit";
 import { ImageUploadForm } from "@/components/image-upload-form";
 import { PokemonCard } from "@/components/pokemon-card";
+import { AceButton } from "@/components/ace-button";
 import { TypeBadge } from "@/components/type-badge";
 import { Card } from "@/components/ui/card";
 import { getRoster, getSchedule, getStats, getTeam, getTeams } from "@/lib/data";
 import { updateCoachBio, updateCoachName, updateTeamName } from "@/lib/actions";
 import { initials } from "@/lib/utils";
+import { pickAce } from "@/lib/ace";
 import { getDominantTypeColor, hexToRgb, TYPE_COLORS } from "@/lib/team-theme";
 import { pokemonTypesFor } from "@/lib/type-chart";
 import type { Pokemon, PokemonStats, PokemonType, Team } from "@/lib/types";
@@ -38,6 +40,9 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
     .map((s) => s.pokemon)
     .filter((p): p is Pokemon => Boolean(p))
     .sort((a, b) => b.pointValue - a.pointValue);
+
+  const ace = pickAce(team, pokemon);
+  const aceIsChosen = !!ace && ace.id === team.acePokemonId;
 
   const { color, secondColor } = pokemon.length > 0
     ? getDominantTypeColor(pokemon)
@@ -182,7 +187,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
                   <User size={32} />
                 )}
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold uppercase tracking-[.25em] text-white/70 sm:text-sm">
                   Coach {team.coach?.name ?? "Unassigned"}
                 </p>
@@ -193,6 +198,22 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
                   {team.teamName}
                 </h1>
               </div>
+
+              {/* Ace */}
+              {ace && (
+                <div className="hidden shrink-0 flex-col items-center sm:flex">
+                  <Image
+                    src={ace.spriteUrl}
+                    alt={ace.name}
+                    width={160}
+                    height={160}
+                    className="size-28 object-contain drop-shadow-[0_6px_10px_rgba(0,0,0,0.7)] lg:size-36"
+                  />
+                  <span className="-mt-2 rounded-full bg-yellow-400 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-black shadow">
+                    ★ Ace · {ace.name}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -364,7 +385,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
           <div className="flex items-baseline justify-between gap-3">
             <h2 className="text-2xl font-black" style={{ color }}>Roster</h2>
             <p className="text-sm text-muted-foreground">
-              {pokemon.length} Pokémon · {totalPoints} pts
+              {pokemon.length} Pokémon · {totalPoints} pts · tap ☆ to choose your ace
             </p>
           </div>
           {pokemon.length === 0 ? (
@@ -372,7 +393,20 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {pokemon.map((p) => (
-                <PokemonCard key={p.id} pokemon={p} stats={statsByPokemon.get(p.id)} />
+                <PokemonCard
+                  key={p.id}
+                  pokemon={p}
+                  stats={statsByPokemon.get(p.id)}
+                  ace={ace?.id === p.id ? (aceIsChosen ? "chosen" : "auto") : undefined}
+                  aceControl={
+                    <AceButton
+                      teamId={team.id}
+                      pokemonId={p.id}
+                      pokemonName={p.name}
+                      isChosenAce={team.acePokemonId === p.id}
+                    />
+                  }
+                />
               ))}
             </div>
           )}

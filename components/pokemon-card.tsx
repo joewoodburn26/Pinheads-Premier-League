@@ -65,12 +65,29 @@ function StatBar({ label, value }: { label: string; value: number }) {
 
 // ── Card ─────────────────────────────────────────────────────────────────────
 
-export async function PokemonCard({ pokemon, stats }: { pokemon: Pokemon; stats?: PokemonStats }) {
+export async function PokemonCard({
+  pokemon,
+  stats,
+  ace,
+  aceControl,
+}: {
+  pokemon: Pokemon;
+  stats?: PokemonStats;
+  /** "chosen" = coach picked it, "auto" = highest-points fallback */
+  ace?: "chosen" | "auto";
+  /** e.g. the star button on team pages */
+  aceControl?: React.ReactNode;
+}) {
   const types = pokemonTypesFor(pokemon);
   const abilities = await getAbilities(pokemon.dexNumber);
 
   return (
-    <Card className="p-4">
+    <Card className={`relative p-4 ${ace ? "border-yellow-400/60 shadow-[0_0_24px_rgba(250,204,21,0.15)]" : ""}`}>
+      {ace && (
+        <span className="absolute -top-2.5 left-4 rounded-full bg-yellow-400 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black">
+          ★ Ace{ace === "auto" ? " · auto" : ""}
+        </span>
+      )}
       {/* Top section: sprite | info | points */}
       <div className="flex items-start gap-4">
 
@@ -100,10 +117,13 @@ export async function PokemonCard({ pokemon, stats }: { pokemon: Pokemon; stats?
           )}
         </div>
 
-        {/* Point value top-right */}
-        <div className="shrink-0 text-right">
-          <p className="text-3xl font-black leading-none">{pokemon.pointValue}</p>
-          <p className="text-xs text-muted-foreground">pts</p>
+        {/* Point value (+ ace control) top-right */}
+        <div className="flex shrink-0 items-start gap-1">
+          <div className="text-right">
+            <p className="text-3xl font-black leading-none">{pokemon.pointValue}</p>
+            <p className="text-xs text-muted-foreground">pts</p>
+          </div>
+          {aceControl}
         </div>
 
       </div>
