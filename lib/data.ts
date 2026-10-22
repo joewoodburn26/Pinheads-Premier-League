@@ -220,6 +220,18 @@ export async function getRules(): Promise<string> {
   return data?.content ?? rulesHtml;
 }
 
+/** Rules content plus when it was last saved. */
+export async function getRulesDoc(): Promise<{ content: string; updatedAt: string | null }> {
+  if (!hasSupabaseEnv()) return { content: rulesHtml, updatedAt: null };
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase
+    .from("league_rules")
+    .select("content, updated_at")
+    .eq("id", "default")
+    .single();
+  return { content: data?.content ?? rulesHtml, updatedAt: data?.updated_at ?? null };
+}
+
 // ─── Internal helper ─────────────────────────────────────────────────────────
 
 function mapPokemon(p: Record<string, unknown>): Pokemon {

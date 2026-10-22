@@ -135,3 +135,24 @@
   transform: translateY(-3px);
 }
 .team-name-color { color: var(--team-color); }
+
+/* ── Rich text (rules, editors) ──────────────────────────────────────────── */
+.rich-content { line-height: 1.7; }
+.rich-content > :first-child { margin-top: 0; }
+.rich-content > :last-child { margin-bottom: 0; }
+.rich-content p { margin: 0.5rem 0; }
+.rich-content h3 { font-size: 1.05rem; font-weight: 800; margin: 1.25rem 0 0.4rem; color: hsl(var(--foreground)); }
+.rich-content h4 { font-size: 0.95rem; font-weight: 700; margin: 1rem 0 0.3rem; color: hsl(var(--foreground)); }
+.rich-content ul { list-style: disc; padding-left: 1.4rem; margin: 0.5rem 0; }
+.rich-content ol { list-style: decimal; padding-left: 1.4rem; margin: 0.5rem 0; }
+.rich-content li { margin: 0.25rem 0; }
+.rich-content li > p { margin: 0; }
+.rich-content li::marker { color: hsl(var(--muted-foreground)); }
+.rich-content strong { font-weight: 700; color: hsl(var(--foreground)); }
+.rich-content a { color: #60a5fa; text-decoration: underline; text-underline-offset: 2px; }
+.rich-content hr { border-color: hsl(var(--border)); margin: 1rem 0; }
+.rich-content blockquote { border-left: 3px solid hsl(var(--border)); padding-left: 0.75rem; color: hsl(var(--muted-foreground)); }
+.ProseMirror:focus { outline: none; }
+
+/* Search matches on the rules page (CSS Custom Highlight API) */
+::highlight(rules-search) { background-color: rgba(250, 204, 21, 0.45); color: inherit; }

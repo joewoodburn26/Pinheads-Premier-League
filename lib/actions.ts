@@ -171,9 +171,11 @@ export async function updateMatch(formData: FormData) {
 }
 
 export async function updateRules(formData: FormData) {
-  if (!hasSupabaseEnv()) return;
-  await createSupabaseAdminClient()
+  if (!hasSupabaseEnv()) throw new Error("Supabase is not configured, so rules can't be saved.");
+  const content = z.string().parse(formData.get("content"));
+  const { error } = await createSupabaseAdminClient()
     .from("league_rules")
-    .upsert({ id: "default", content: z.string().parse(formData.get("content")), updated_at: new Date().toISOString() });
+    .upsert({ id: "default", content, updated_at: new Date().toISOString() });
+  if (error) throw new Error(error.message);
   revalidatePath("/rules");
 }
