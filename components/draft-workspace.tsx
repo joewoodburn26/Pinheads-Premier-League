@@ -797,7 +797,7 @@ export function DraftWorkspace({
       const loaded = decodeTeam(encoded, pokemon);
       if (loaded.length > 0) setSlots(loaded);
     }
-  }, [pokemon]);
+  }, [pokemon, initialPlan]);
 
   // ── Load picks from Randomizer (sessionStorage) ──
   useEffect(() => {

@@ -10,7 +10,6 @@ import { TypeBadge } from "@/components/type-badge";
 import { pokemonTypes, typeColors } from "@/lib/type-chart";
 import { saveMatchupNotes } from "@/lib/prep-actions";
 import type { PrepMember, PrepTeam } from "@/lib/prep";
-import type { PokemonType } from "@/lib/types";
 
 type TeamOption = { id: string; teamName: string; coachName: string };
 type Category = { key: string; label: string };
