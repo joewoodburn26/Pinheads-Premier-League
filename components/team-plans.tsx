@@ -8,13 +8,17 @@ import { Download, ExternalLink, Lock, Pencil, Trash2, Wand2 } from "lucide-reac
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { exportToPdf, type BuilderSlot } from "@/components/draft-workspace";
+import type { BuilderSlot } from "@/components/draft-workspace";
+import { exportPlanPdf } from "@/lib/plan-pdf";
+import type { PrepTeam } from "@/lib/prep";
 import { deletePlan, renamePlan } from "@/lib/plan-actions";
 
 export type PlanSummary = {
   id: string;
   name: string;
   slots: BuilderSlot[];
+  /** Moves / weaknesses for the PDF, in the season's format */
+  prep: PrepTeam;
   points: number;
   updatedLabel: string;
   createdByName: string | null;
@@ -25,12 +29,16 @@ export function TeamPlans({
   plans,
   budget,
   seasonName,
+  categories,
+  formatLabel,
   accent,
 }: {
   teamId: string;
   plans: PlanSummary[];
   budget: number;
   seasonName?: string;
+  categories: { key: string; label: string }[];
+  formatLabel: string;
   accent: string;
 }) {
   return (
@@ -57,7 +65,7 @@ export function TeamPlans({
       ) : (
         <div className="divide-y divide-white/5">
           {plans.map((p) => (
-            <PlanRow key={p.id} teamId={teamId} plan={p} budget={budget} seasonName={seasonName} />
+            <PlanRow key={p.id} teamId={teamId} plan={p} budget={budget} seasonName={seasonName} categories={categories} formatLabel={formatLabel} />
           ))}
         </div>
       )}
@@ -70,11 +78,15 @@ function PlanRow({
   plan,
   budget,
   seasonName,
+  categories,
+  formatLabel,
 }: {
   teamId: string;
   plan: PlanSummary;
   budget: number;
   seasonName?: string;
+  categories: { key: string; label: string }[];
+  formatLabel: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -143,7 +155,16 @@ function PlanRow({
             <Wand2 size={13} /> Draft Room
           </Link>
           <button
-            onClick={() => exportToPdf(plan.slots, budget, seasonName ? `${seasonName} · ${plan.name}` : plan.name)}
+            onClick={() =>
+              exportPlanPdf({
+                title: seasonName ? `${seasonName} · ${plan.name}` : plan.name,
+                slots: plan.slots,
+                budget,
+                prep: plan.prep,
+                categories,
+                formatLabel,
+              })
+            }
             className="flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs hover:bg-muted"
           >
             <Download size={13} /> PDF

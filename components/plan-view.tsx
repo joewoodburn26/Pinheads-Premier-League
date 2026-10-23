@@ -5,9 +5,10 @@ import Link from "next/link";
 import { ArrowLeft, Download, Lock, Wand2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { TypeBadge } from "@/components/type-badge";
-import {
-  CoverageMap, RoleBalance, SpeedTiers, ThreatScore, exportToPdf, type BuilderSlot,
-} from "@/components/draft-workspace";
+import { MoveCategoryCard, Section, SpeedSection, WEAKNESS_HINT, WeaknessGrid, YOU } from "@/components/prep-parts";
+import type { BuilderSlot } from "@/components/draft-workspace";
+import { exportPlanPdf } from "@/lib/plan-pdf";
+import type { PrepTeam } from "@/lib/prep";
 import { pokemonTypesFor } from "@/lib/type-chart";
 
 export function PlanView({
@@ -21,6 +22,9 @@ export function PlanView({
   updatedLabel,
   createdByName,
   missing,
+  prep,
+  categories,
+  formatLabel,
 }: {
   planId: string;
   planName: string;
@@ -33,7 +37,12 @@ export function PlanView({
   createdByName: string | null;
   /** Picks that no longer exist in the Pokédex */
   missing: number;
+  /** Prep data for the picks (moves, weaknesses) in the season's format */
+  prep: PrepTeam;
+  categories: { key: string; label: string }[];
+  formatLabel: string;
 }) {
+  const title = seasonName ? `${seasonName} · ${planName}` : planName;
   const used = slots.reduce((n, s) => n + s.pokemon.pointValue, 0);
   const over = used > budget;
   const avgBst = slots.length ? Math.round(slots.reduce((n, s) => n + s.pokemon.bst, 0) / slots.length) : 0;
@@ -66,7 +75,7 @@ export function PlanView({
               <Wand2 size={15} /> Open in Draft Room
             </Link>
             <button
-              onClick={() => exportToPdf(slots, budget, seasonName ? `${seasonName} · ${planName}` : planName)}
+              onClick={() => exportPlanPdf({ title, slots, budget, prep, categories, formatLabel })}
               className="flex items-center gap-1.5 rounded-md border px-4 py-2 text-sm font-semibold hover:bg-muted"
             >
               <Download size={15} /> Download PDF
@@ -122,29 +131,32 @@ export function PlanView({
         ))}
       </section>
 
-      {/* ── Analysis ─────────────────────────────────────────────────── */}
-      <section className="grid gap-4 lg:grid-cols-2">
-        <Card className="space-y-2 p-4">
-          <h3 className="text-sm font-bold">Type Coverage</h3>
-          <p className="text-xs text-muted-foreground">↑ = your hits · ↓ = your weaknesses</p>
-          <CoverageMap slots={slots} />
-        </Card>
-        <div className="space-y-4">
-          <Card className="space-y-2 p-4">
-            <h3 className="text-sm font-bold">Role Balance</h3>
-            <RoleBalance slots={slots} />
-          </Card>
-          <Card className="space-y-2 p-4">
-            <h3 className="text-sm font-bold">Top Threats</h3>
-            <p className="text-xs text-muted-foreground">Types that hit the most of your team</p>
-            <ThreatScore slots={slots} />
-          </Card>
-          <Card className="space-y-2 p-4">
-            <h3 className="text-sm font-bold">Speed Tiers</h3>
-            <SpeedTiers slots={slots} />
-          </Card>
-        </div>
-      </section>
+      {slots.length > 0 && (
+        <>
+          {prep.unmatched.length > 0 && (
+            <p className="text-xs text-yellow-400">
+              No move data found for: {prep.unmatched.join(", ")}.
+            </p>
+          )}
+
+          {/* ── Moves ─────────────────────────────────────────────────── */}
+          <Section id="moves" title="Moves" hint={`Who on this plan can learn each utility move (${formatLabel}).`}>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {categories.map((cat) => (
+                <MoveCategoryCard key={cat.key} label={cat.label} catKey={cat.key} sides={[{ side: YOU, team: prep }]} />
+              ))}
+            </div>
+          </Section>
+
+          {/* ── Weakness grid ─────────────────────────────────────────── */}
+          <Section id="grid" title="Weakness Grid" hint={WEAKNESS_HINT}>
+            <WeaknessGrid members={prep.members} />
+          </Section>
+
+          {/* ── Speed tiers ───────────────────────────────────────────── */}
+          <SpeedSection sides={[{ side: YOU, members: prep.members }]} />
+        </>
+      )}
     </div>
   );
 }

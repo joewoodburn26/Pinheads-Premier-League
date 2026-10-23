@@ -3,6 +3,8 @@ import { PlanView } from "@/components/plan-view";
 import { canEditTeam, getCurrentUser } from "@/lib/auth";
 import { getActiveSeason, getPokemon, getTeams } from "@/lib/data";
 import { getPlan, resolvePicks } from "@/lib/plans";
+import { PREP_CATEGORIES, buildPrepTeam } from "@/lib/prep";
+import { formatLabel } from "@/lib/dex";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Draft Plan · Pinheads Premier League" };
@@ -42,6 +44,9 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
       updatedLabel={formatDate(plan.updatedAt)}
       createdByName={plan.createdByName}
       missing={plan.picks.length - slots.length}
+      prep={buildPrepTeam(slots.map((s) => s.pokemon), season?.format)}
+      categories={PREP_CATEGORIES.map((c) => ({ key: c.key, label: c.label }))}
+      formatLabel={formatLabel(season?.format)}
     />
   );
 }

@@ -15,6 +15,8 @@ import { pickAce } from "@/lib/ace";
 import { canEditTeam, getCurrentUser } from "@/lib/auth";
 import { TeamPlans, type PlanSummary } from "@/components/team-plans";
 import { getTeamPlans, resolvePicks } from "@/lib/plans";
+import { PREP_CATEGORIES, buildPrepTeam } from "@/lib/prep";
+import { formatLabel } from "@/lib/dex";
 import { getDominantTypeColor, hexToRgb, TYPE_COLORS } from "@/lib/team-theme";
 import { pokemonTypesFor } from "@/lib/type-chart";
 import type { Pokemon, PokemonStats, PokemonType, Team } from "@/lib/types";
@@ -46,16 +48,19 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
   let planSummaries: PlanSummary[] = [];
   let planBudget = 105;
   let planSeasonName: string | undefined;
+  let planFormat: string | undefined;
   if (canEdit) {
     const [plans, allPokemon, season] = await Promise.all([getTeamPlans(team.id), getPokemon(), getActiveSeason()]);
     planBudget = season?.draftBudget ?? 105;
     planSeasonName = season?.name;
+    planFormat = season?.format;
     planSummaries = plans.map((plan) => {
       const slots = resolvePicks(plan.picks, allPokemon);
       return {
         id: plan.id,
         name: plan.name,
         slots,
+        prep: buildPrepTeam(slots.map((s) => s.pokemon), season?.format),
         points: slots.reduce((n, s) => n + s.pokemon.pointValue, 0),
         updatedLabel: new Date(plan.updatedAt).toLocaleDateString("en-US", {
           month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York",
@@ -450,6 +455,8 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
             plans={planSummaries}
             budget={planBudget}
             seasonName={planSeasonName}
+            categories={PREP_CATEGORIES.map((c) => ({ key: c.key, label: c.label }))}
+            formatLabel={formatLabel(planFormat)}
             accent={color}
           />
         )}
