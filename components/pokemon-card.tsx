@@ -3,6 +3,7 @@ import type { Pokemon, PokemonStats } from "@/lib/types";
 import { pokemonTypesFor } from "@/lib/type-chart";
 import { TypeBadge } from "@/components/type-badge";
 import { Card } from "@/components/ui/card";
+import { STAT_BAR_MAX } from "@/lib/utils";
 
 // ── Fetch abilities from PokéAPI ─────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ function statColor(value: number): string {
 }
 
 function StatBar({ label, value }: { label: string; value: number }) {
-  const pct = Math.min(100, Math.round((value / 255) * 100));
+  const pct = Math.min(100, Math.round((value / STAT_BAR_MAX) * 100));
   return (
     <div className="flex items-center gap-2 text-xs">
       <span className="w-12 shrink-0 text-right text-muted-foreground">{label}</span>

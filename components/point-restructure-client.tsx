@@ -49,11 +49,14 @@ function generateCsv(pokemon: Pokemon[]): string {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function PointRestructureClient({
-  pokemon, seasonId, seasons,
+  pokemon, seasonId, seasons, csvIds, formatName,
 }: {
   pokemon: Pokemon[];
   seasonId: string;
   seasons: Season[];
+  /** Pokémon included in the CSV download (not banned, allowed by the format) */
+  csvIds: string[];
+  formatName: string;
 }) {
   const [query,      setQuery]      = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("");
@@ -143,7 +146,8 @@ export function PointRestructureClient({
   }
 
   function handleDownload() {
-    const csv = generateCsv(pokemon);
+    const include = new Set(csvIds);
+    const csv = generateCsv(pokemon.filter((p) => include.has(p.id)));
     const blob = new Blob([csv], { type: "text/csv" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
@@ -188,6 +192,9 @@ export function PointRestructureClient({
           <p className="font-semibold text-sm mb-1">Bulk Edit via CSV</p>
           <p className="text-xs text-muted-foreground">
             Download → edit Points column in Excel → re-upload. CSV includes sprite URL and all stats for reference.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            The download has the {csvIds.length} Pokémon legal in {formatName}: banned ones are left out.
           </p>
         </div>
         <div className="flex flex-wrap gap-3 ml-auto items-center">

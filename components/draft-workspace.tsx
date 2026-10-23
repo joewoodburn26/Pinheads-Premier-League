@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { multiplier, pokemonTypes, pokemonTypesFor, typeColors } from "@/lib/type-chart";
 import type { Pokemon, PokemonType } from "@/lib/types";
+import { STAT_BAR_MAX } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -406,12 +407,12 @@ export function exportToPdf(slots: BuilderSlot[], budget: number, seasonName?: s
           <div class="poke-name">${mon.name}</div>
           <div class="poke-pts">${mon.pointValue}<span>pts</span></div>
           <div class="types">${typeHtml}</div>
-          ${bar(mon.hp,             255, statColor(mon.hp))}
-          ${bar(mon.attack,         255, statColor(mon.attack))}
-          ${bar(mon.defense,        255, statColor(mon.defense))}
-          ${bar(mon.specialAttack,  255, statColor(mon.specialAttack))}
-          ${bar(mon.specialDefense, 255, statColor(mon.specialDefense))}
-          ${bar(mon.speed,          255, statColor(mon.speed))}
+          ${bar(mon.hp,             STAT_BAR_MAX, statColor(mon.hp))}
+          ${bar(mon.attack,         STAT_BAR_MAX, statColor(mon.attack))}
+          ${bar(mon.defense,        STAT_BAR_MAX, statColor(mon.defense))}
+          ${bar(mon.specialAttack,  STAT_BAR_MAX, statColor(mon.specialAttack))}
+          ${bar(mon.specialDefense, STAT_BAR_MAX, statColor(mon.specialDefense))}
+          ${bar(mon.speed,          STAT_BAR_MAX, statColor(mon.speed))}
           <div class="bst-row">BST ${mon.bst}</div>
           ${note ? `<div class="note">${note}</div>` : ""}
         </div>
@@ -1105,7 +1106,7 @@ export function DraftWorkspace({
                         <div className="grid max-w-md grid-cols-2 gap-x-6 gap-y-1">
                           {[0, 3, 1, 4, 2, 5].map(i => {
                             const { key, label } = STAT_KEYS[i];
-                            return <StatBar key={key} label={label} value={mon[key]} max={255} />;
+                            return <StatBar key={key} label={label} value={mon[key]} max={STAT_BAR_MAX} />;
                           })}
                         </div>
                       </div>

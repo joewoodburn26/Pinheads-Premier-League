@@ -18,3 +18,6 @@ export function initials(name: string) {
     .slice(0, 2)
     .toUpperCase();
 }
+
+/** Base stat that fills a whole stat bar. Anything higher is just a full bar. */
+export const STAT_BAR_MAX = 180;
