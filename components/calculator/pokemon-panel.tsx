@@ -344,8 +344,12 @@ export function PokemonPanel({
         </label>
         <label className="space-y-1 text-xs text-muted-foreground">
           Item
-          <input value={set.item} onChange={(e) => patchSet({ item: e.target.value })} list="calc-items" placeholder="(none)" className={sel} />
-          <datalist id="calc-items">{items.map((i) => <option key={i} value={i} />)}</datalist>
+          {/* A full list (not a type-to-search box), so a set's item can always be swapped */}
+          <select value={set.item} onChange={(e) => patchSet({ item: e.target.value })} className={sel}>
+            <option value="">(none)</option>
+            {set.item && !items.includes(set.item) && <option value={set.item}>{set.item}</option>}
+            {items.map((i) => <option key={i} value={i}>{i}</option>)}
+          </select>
         </label>
         <label className="space-y-1 text-xs text-muted-foreground">
           Status
