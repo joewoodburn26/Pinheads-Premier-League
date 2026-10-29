@@ -458,6 +458,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
             categories={PREP_CATEGORIES.map((c) => ({ key: c.key, label: c.label }))}
             formatLabel={formatLabel(planFormat)}
             accent={color}
+            startHidden={user?.coachId !== team.coachId || !team.coachId}
           />
         )}
 

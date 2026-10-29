@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, ExternalLink, Lock, Pencil, Trash2, Wand2 } from "lucide-react";
+import { Download, ExternalLink, Eye, EyeOff, Lock, Pencil, Trash2, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,7 @@ export function TeamPlans({
   categories,
   formatLabel,
   accent,
+  startHidden = false,
 }: {
   teamId: string;
   plans: PlanSummary[];
@@ -40,27 +41,48 @@ export function TeamPlans({
   categories: { key: string; label: string }[];
   formatLabel: string;
   accent: string;
+  /** Collapse until clicked (another team's plans, seen by an admin or the owner) */
+  startHidden?: boolean;
 }) {
+  const [open, setOpen] = useState(!startHidden);
+  const count = `${plans.length} plan${plans.length === 1 ? "" : "s"}`;
+
   return (
     <Card className="overflow-hidden" style={{ borderColor: `${accent}55` }}>
       <div className="flex flex-wrap items-center gap-3 border-b border-white/5 bg-white/[0.02] px-5 py-3.5">
         <Lock size={16} className="text-muted-foreground" />
         <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-black leading-tight">Draft Plans</h2>
-          <p className="text-xs text-muted-foreground">Private: only this team&apos;s coach, admins and the owner can see these.</p>
+          <h2 className="text-lg font-black leading-tight">
+            Draft Plans
+            {startHidden && <span className="ml-2 text-sm font-semibold text-muted-foreground">· {count}</span>}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {startHidden && !open
+              ? "Hidden so you don't see this team's plans by accident."
+              : "Private: only this team\u2019s coach, admins and the owner can see these."}
+          </p>
         </div>
+        {startHidden ? (
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {open ? <><EyeOff size={13} /> Hide</> : <><Eye size={13} /> Show</>}
+          </button>
+        ) : (
         <Link
           href="/draft"
           className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <Wand2 size={13} /> New plan in Draft Room
         </Link>
+        )}
       </div>
 
-      {plans.length === 0 ? (
+      {!open ? null : plans.length === 0 ? (
         <p className="px-5 py-6 text-sm text-muted-foreground">
-          No plans yet. Build a team in the <Link href="/draft" className="underline">Draft Room</Link> and click{" "}
-          <span className="font-semibold text-foreground">Save plan</span>.
+          {startHidden ? "This team has no plans." : <>No plans yet. Build a team in the <Link href="/draft" className="underline">Draft Room</Link> and click{" "}
+          <span className="font-semibold text-foreground">Save plan</span>.</>}
         </p>
       ) : (
         <div className="divide-y divide-white/5">
