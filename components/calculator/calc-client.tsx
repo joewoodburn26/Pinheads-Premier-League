@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { FieldPanel } from "@/components/calculator/field-panel";
 import { PokemonPanel, type PickOption } from "@/components/calculator/pokemon-panel";
 import {
-  blankField, blankSide, defaultSet, getGen, runCalcs, statsOf, withSet,
+  basicSet, blankField, blankSide, getGen, runCalcs, statsOf, withSet,
   type FieldState, type MoveResult, type SideState,
 } from "@/components/calculator/calc-utils";
 import { exportSet, parseTeam, type CalcSet } from "@/lib/showdown-text";
@@ -18,24 +18,38 @@ export type CalcPokemon = { id: string; name: string; species: string; sprite: s
 export type CalcTeam = { id: string; name: string; roster: string[] };
 
 const ACCENTS: [string, string] = ["#3b82f6", "#ef4444"];
-const IMPORTS_KEY = "ppl-calc-imports-v1";
-const DEFAULT_LABEL = "Default set";
+const IMPORTS_KEY = "ppl-calc-sets-v2";
+const OLD_IMPORTS_KEY = "ppl-calc-imports-v1";
+const BASIC = "basic";
 
 type SpeciesData = { moves: string[]; abilities: string[]; sets: NamedSet[] };
 
-function readImports(): NamedSet[] {
+/** A set the member imported from Showdown, filed under its Pokémon. */
+export type SavedSet = { id: string; name: string; set: CalcSet };
+
+const newId = () => Math.random().toString(36).slice(2, 10);
+
+function readImports(): SavedSet[] {
   try {
     const raw = localStorage.getItem(IMPORTS_KEY);
-    const parsed = raw ? (JSON.parse(raw) as NamedSet[]) : [];
-    return Array.isArray(parsed) ? parsed.filter((s) => s?.label && s?.set?.species) : [];
+    if (raw) {
+      const parsed = JSON.parse(raw) as SavedSet[];
+      return Array.isArray(parsed) ? parsed.filter((s) => s?.id && s?.set?.species) : [];
+    }
+    // Sets imported before sets had names
+    const old = JSON.parse(localStorage.getItem(OLD_IMPORTS_KEY) ?? "[]") as NamedSet[];
+    return Array.isArray(old)
+      ? old.filter((n) => n?.set?.species).map((n) => ({ id: newId(), name: n.label.replace(/^Imported · /, ""), set: n.set }))
+      : [];
   } catch {
     return [];
   }
 }
 
-function writeImports(list: NamedSet[]) {
+function writeImports(list: SavedSet[]) {
   try {
     localStorage.setItem(IMPORTS_KEY, JSON.stringify(list));
+    localStorage.removeItem(OLD_IMPORTS_KEY);
   } catch {
     /* storage unavailable: imports last for this visit only */
   }
@@ -103,7 +117,7 @@ export function CalcClient({
   );
 
   // ── State ─────────────────────────────────────────────────────────────────
-  const [imports, setImports] = useState<NamedSet[]>([]);
+  const [imports, setImports] = useState<SavedSet[]>([]);
   useEffect(() => setImports(readImports()), []);
 
   const initialPick = (i: 0 | 1) => {
@@ -130,22 +144,18 @@ export function CalcClient({
     setSides((prev) => (i === 0 ? [s, prev[1]] : [prev[0], s]));
   }, []);
 
-  /** Load a set on a side (Smogon, imported, or default). */
+  /** Load a set on a side. `key` is "basic", "imp:<id>" or "smogon:<label>". */
   const applySet = useCallback(
     (i: 0 | 1, set: CalcSet, label: string, pokemonId?: string, data?: SpeciesData) => {
       let s = set;
-      // Smogon / default sets follow the season's movepool; imported sets are left as pasted
-      if (data && data.moves.length && !label.startsWith("Imported")) {
+      // Smogon sets follow the season's movepool; imported sets are left as pasted
+      if (data && data.moves.length && !label.startsWith("imp:")) {
         const legal = new Set(data.moves);
-        const kept = set.moves.filter((m) => legal.has(m));
-        if (kept.length < set.moves.length) {
-          const filler = defaultSet(gen, set.species, data.moves, data.abilities, set.level).moves.filter((m) => !kept.includes(m));
-          s = { ...set, moves: [...kept, ...filler].slice(0, 4) };
-        }
+        s = { ...set, moves: set.moves.filter((m) => legal.has(m)) };
       }
       setSide(i, { ...withSet(blankSide(set.species, set.level, pokemonId), s, label) });
     },
-    [gen, setSide],
+    [setSide],
   );
 
   const pickSpecies = useCallback(
@@ -154,11 +164,10 @@ export function CalcClient({
       setSide(i, blankSide(species, defaultLevel, pokemonId));
       const data = await loadSpecies(species);
       if (token !== tokens.current[i]) return;
-      const first = data.sets[0];
-      if (first) applySet(i, first.set, first.label, pokemonId, data);
-      else applySet(i, defaultSet(gen, species, data.moves, data.abilities, defaultLevel), DEFAULT_LABEL, pokemonId, data);
+      // Start basic (31 IVs, no EVs or moves); Smogon sets are in the Set dropdown
+      applySet(i, basicSet(species, data.abilities, defaultLevel), BASIC, pokemonId, data);
     },
-    [applySet, defaultLevel, gen, loadSpecies, setSide],
+    [applySet, defaultLevel, loadSpecies, setSide],
   );
 
   // First load
@@ -175,27 +184,21 @@ export function CalcClient({
   }, [sides, loadSpecies]);
 
   function pick(i: 0 | 1, key: string) {
-    if (key.startsWith("imp:")) {
-      const named = imports.find((n) => n.label === key.slice(4));
-      if (!named) return;
-      tokens.current[i]++;
-      const mon = bySpecies.get(toID(named.set.species));
-      applySet(i, named.set, named.label, mon?.id);
-      return;
-    }
     const mon = byId.get(key);
     if (mon) void pickSpecies(i, mon.species, mon.id);
   }
 
-  function loadSet(i: 0 | 1, label: string) {
+  function loadSet(i: 0 | 1, key: string) {
     const side = sides[i];
     const data = loaded[toID(side.set.species)];
-    const imported = imports.find((n) => n.label === label);
-    if (imported) return applySet(i, imported.set, imported.label, side.pokemonId);
-    const smogon = data?.sets.find((n) => n.label === label);
-    if (smogon) return applySet(i, smogon.set, smogon.label, side.pokemonId, data);
-    if (label === DEFAULT_LABEL && data) {
-      applySet(i, defaultSet(gen, side.set.species, data.moves, data.abilities, defaultLevel), DEFAULT_LABEL, side.pokemonId, data);
+    if (key.startsWith("imp:")) {
+      const saved = imports.find((n) => n.id === key.slice(4));
+      if (saved) applySet(i, saved.set, key, side.pokemonId);
+    } else if (key.startsWith("smogon:")) {
+      const smogon = data?.sets.find((n) => n.label === key.slice(7));
+      if (smogon) applySet(i, smogon.set, key, side.pokemonId, data);
+    } else if (key === BASIC) {
+      applySet(i, basicSet(side.set.species, data?.abilities ?? [], defaultLevel), BASIC, side.pokemonId, data);
     }
   }
 
@@ -204,20 +207,11 @@ export function CalcClient({
     () => [
       { value: "all", label: `All legal Pokémon (${pokemon.length})` },
       ...teams.map((t) => ({ value: t.id, label: `${t.name}${t.id === myTeamId ? " (yours)" : ""}` })),
-      { value: "imports", label: `Imported sets (${imports.length})` },
     ],
-    [imports.length, myTeamId, pokemon.length, teams],
+    [myTeamId, pokemon.length, teams],
   );
 
   function picksFor(filter: string): PickOption[] {
-    if (filter === "imports") {
-      return imports.map((n) => ({
-        key: `imp:${n.label}`,
-        name: n.label.replace(/^Imported · /, ""),
-        species: n.set.species,
-        sprite: bySpecies.get(toID(n.set.species))?.sprite ?? `https://play.pokemonshowdown.com/sprites/gen5/${toID(n.set.species)}.png`,
-      }));
-    }
     const ids = filter === "all" ? pokemon.map((p) => p.id) : teams.find((t) => t.id === filter)?.roster ?? [];
     return ids.flatMap((id) => {
       const p = byId.get(id);
@@ -243,27 +237,49 @@ export function CalcClient({
     return spe;
   });
 
-  // ── Import / export ───────────────────────────────────────────────────────
-  function doImport(i: 0 | 1, text: string): string | null {
-    const sets = parseTeam(text, defaultLevel);
-    if (!sets.length) return "Couldn't find any Pokémon in that text. Paste a team exported from Showdown.";
-    const existing = new Map(imports.map((n) => [n.label, n]));
-    const added: NamedSet[] = [];
-    for (const set of sets) {
-      const base = `Imported · ${set.nickname && set.nickname !== set.species ? `${set.nickname} (${set.species})` : set.species}`;
-      existing.delete(base);
-      const named = { label: base, set };
-      existing.set(base, named);
-      added.push(named);
-    }
-    const next = [...existing.values()];
+  // ── Import / export / manage saved sets ───────────────────────────────────
+  function saveImports(next: SavedSet[]) {
     setImports(next);
     writeImports(next);
-    setTeamFilter((prev) => (i === 0 ? ["imports", prev[1]] : [prev[0], "imports"]));
+  }
+
+  function doImport(i: 0 | 1, text: string, setName: string): string | null {
+    const sets = parseTeam(text, defaultLevel);
+    if (!sets.length) return "Couldn't find any Pokémon in that text. Paste a set exported from Showdown.";
+    const name = setName.trim().slice(0, 40);
+    let next = [...imports];
+    const added: SavedSet[] = [];
+    for (const set of sets) {
+      const label = name || set.nickname || "Imported set";
+      // Same Pokémon + same name replaces the old copy
+      next = next.filter((n) => !(toID(n.set.species) === toID(set.species) && n.name === label));
+      const saved = { id: newId(), name: label, set };
+      next.push(saved);
+      added.push(saved);
+    }
+    saveImports(next);
     const first = added[0];
     tokens.current[i]++;
-    applySet(i, first.set, first.label, bySpecies.get(toID(first.set.species))?.id);
+    void loadSpecies(first.set.species);
+    applySet(i, first.set, `imp:${first.id}`, bySpecies.get(toID(first.set.species))?.id);
     return null;
+  }
+
+  function renameSet(id: string, name: string) {
+    const clean = name.trim().slice(0, 40);
+    if (!clean) return;
+    saveImports(imports.map((n) => (n.id === id ? { ...n, name: clean } : n)));
+  }
+
+  function deleteSet(id: string) {
+    saveImports(imports.filter((n) => n.id !== id));
+    // Any side showing that set drops back to the basic set
+    ([0, 1] as const).forEach((j) => {
+      if (sides[j].setLabel === `imp:${id}`) {
+        const data = loaded[toID(sides[j].set.species)];
+        applySet(j, basicSet(sides[j].set.species, data?.abilities ?? [], defaultLevel), BASIC, sides[j].pokemonId, data);
+      }
+    });
   }
 
   async function doExport(i: 0 | 1) {
@@ -275,21 +291,18 @@ export function CalcClient({
     }
   }
 
-  function clearImports() {
-    setImports([]);
-    writeImports([]);
-    setTeamFilter((prev) => prev.map((f) => (f === "imports" ? "all" : f)) as [string, string]);
-  }
-
   // ── Render ────────────────────────────────────────────────────────────────
   const panel = (i: 0 | 1) => {
     const side = sides[i];
     const data = loaded[toID(side.set.species)];
-    const setOptions = [
-      ...imports.filter((n) => toID(n.set.species) === toID(side.set.species)).map((n) => n.label),
-      ...(data?.sets.map((n) => n.label) ?? []),
-      DEFAULT_LABEL,
-    ];
+    const mine = imports.filter((n) => toID(n.set.species) === toID(side.set.species));
+    const setGroups = [
+      { label: "", options: [{ value: BASIC, text: "Basic (no EVs or moves)" }] },
+      { label: "Your sets", options: mine.map((n) => ({ value: `imp:${n.id}`, text: n.name })) },
+      { label: "Smogon sets", options: (data?.sets ?? []).map((n) => ({ value: `smogon:${n.label}`, text: n.label })) },
+    ].filter((g) => g.options.length);
+    const savedId = side.setLabel.startsWith("imp:") ? side.setLabel.slice(4) : null;
+    const saved = savedId ? imports.find((n) => n.id === savedId) : undefined;
     const mon = side.pokemonId ? byId.get(side.pokemonId) : bySpecies.get(toID(side.set.species));
     return (
       <PokemonPanel
@@ -304,8 +317,11 @@ export function CalcClient({
         picks={picksFor(teamFilter[i])}
         onPick={(key) => pick(i, key)}
         sprite={mon?.sprite ?? `https://play.pokemonshowdown.com/sprites/gen5/${toID(side.set.species)}.png`}
-        setOptions={setOptions}
-        onLoadSet={(label) => loadSet(i, label)}
+        setGroups={setGroups}
+        onLoadSet={(key) => loadSet(i, key)}
+        savedSetName={saved?.name}
+        onRenameSet={saved ? (name) => renameSet(saved.id, name) : undefined}
+        onDeleteSet={saved ? () => deleteSet(saved.id) : undefined}
         onImport={() => setImportFor(i)}
         onExport={() => doExport(i)}
         legalMoves={data?.moves ?? []}
@@ -393,19 +409,16 @@ export function CalcClient({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {formatLabel} · damage from Smogon&apos;s calc (the Showdown calculator&apos;s engine). Starting sets come from Smogon when
-        one exists. Imported sets stay in this browser.
-        {imports.length > 0 && (
-          <button onClick={clearImports} className="ml-2 underline hover:text-foreground">Clear imported sets</button>
-        )}
+        {formatLabel} · damage from Smogon&apos;s calc (the Showdown calculator&apos;s engine). Pokémon start with 31 IVs and no EVs or moves;
+        pick Smogon sets or your imported sets from the dropdown next to the Pokémon&apos;s name. Imported sets are saved in this browser.
       </p>
 
       {importFor !== null && (
         <ImportDialog
           side={importFor}
           onClose={() => setImportFor(null)}
-          onImport={(text) => {
-            const err = doImport(importFor, text);
+          onImport={(text, name) => {
+            const err = doImport(importFor, text, name);
             if (!err) setImportFor(null);
             return err;
           }}
@@ -415,31 +428,51 @@ export function CalcClient({
   );
 }
 
-function ImportDialog({ side, onClose, onImport }: { side: 0 | 1; onClose: () => void; onImport: (text: string) => string | null }) {
+function ImportDialog({
+  side,
+  onClose,
+  onImport,
+}: {
+  side: 0 | 1;
+  onClose: () => void;
+  onImport: (text: string, name: string) => string | null;
+}) {
   const [text, setText] = useState("");
+  const [name, setName] = useState("");
   const [error, setError] = useState("");
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" onClick={onClose}>
       <Card className="w-full max-w-xl space-y-3 p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-black">Import Showdown team · Pokémon {side + 1}</h3>
+          <h3 className="text-lg font-black">Import Showdown set · Pokémon {side + 1}</h3>
           <button onClick={onClose} aria-label="Close" className="rounded p-1 text-muted-foreground hover:bg-muted"><X size={16} /></button>
         </div>
         <p className="text-xs text-muted-foreground">
-          In Showdown&apos;s Teambuilder, open your team and click <b>Import/Export</b>, then copy the text here. The whole team
-          is saved under &quot;Imported sets&quot; for both sides; the first Pokémon loads now.
+          In Showdown&apos;s Teambuilder, click <b>Import/Export</b> and copy one Pokémon or a whole team. Each Pokémon&apos;s set
+          is saved under that Pokémon with the name below, so you can pick it from its set list later.
         </p>
+        <label className="block space-y-1 text-xs text-muted-foreground">
+          Set name
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={40}
+            autoFocus
+            placeholder="e.g. VS Michael"
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground"
+          />
+        </label>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          autoFocus
-          placeholder={"Garchomp @ Choice Scarf\nAbility: Rough Skin\nEVs: 252 Atk / 4 SpD / 252 Spe\nJolly Nature\n- Earthquake\n- Outrage"}
-          className="h-72 w-full rounded-md border bg-background p-3 font-mono text-xs"
+          placeholder={"Politoed @ Damp Rock\nAbility: Drizzle\nEVs: 252 HP / 252 Def / 4 SpD\nBold Nature\n- Scald\n- Encore"}
+          className="h-64 w-full rounded-md border bg-background p-3 font-mono text-xs"
         />
         {error && <p className="text-xs text-red-400">{error}</p>}
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-2">
+          {!name.trim() && <span className="mr-auto text-xs text-muted-foreground">No name? It&apos;s saved as &quot;Imported set&quot;.</span>}
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => setError(onImport(text) ?? "")} disabled={!text.trim()}>Import</Button>
+          <Button onClick={() => setError(onImport(text, name) ?? "")} disabled={!text.trim()}>Import</Button>
         </div>
       </Card>
     </div>

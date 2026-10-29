@@ -256,61 +256,19 @@ export function runCalcs(gen: Gen, sides: [SideState, SideState], field: FieldSt
   });
 }
 
-// ── Defaults when there's no Smogon set ──────────────────────────────────────
+// ── Starting set ─────────────────────────────────────────────────────────────
 
-const AVOID = new Set([
-  "hyperbeam", "gigaimpact", "solarbeam", "solarblade", "explosion", "selfdestruct", "focuspunch", "skyattack",
-  "futuresight", "doomdesire", "dreameater", "lastresort", "belch", "synchronoise", "steelbeam", "mindblown",
-  "shadowforce", "phantomforce", "skullbash", "razorwind", "freezeshock", "iceburn", "meteorbeam", "electroshot",
-  "dig", "dive", "fly", "bounce", "outrage", "thrash", "petaldance", "ragingfury", "blastburn", "hydrocannon",
-  "frenzyplant", "rockwrecker", "roaroftime", "prismaticlaser", "eternabeam", "hyperspacefury", "dynamaxcannon",
-  "behemothblade", "behemothbash", "naturalgift", "fling", "spitup", "lastrespects", "ragefist", "stompingtantrum",
-  "hiddenpower", "trumpcard", "dragonrush", "irontail", "megakick", "megapunch", "rockclimb", "zapcannon", "inferno", "dynamicpunch", "doubleedge", "wringout", "crushgrip", "punishment", "return", "frustration",
-]);
-
-/** A sensible starting set: max HP + best attacking stat, the strongest legal attacks. */
-export function defaultSet(gen: Gen, species: string, legalMoves: string[], abilities: string[], level: number): CalcSet {
-  const name = calcSpeciesName(gen, species);
-  const sp = name ? gen.species.get(toID(name)) : undefined;
-  const base = sp?.baseStats ?? { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
-  const physical = base.atk >= base.spa;
-  const fast = base.spe >= 90;
-  const champions = gen.num === 0;
-  const max = champions ? 32 : 252;
-  const evs = zeroStats();
-  evs[physical ? "atk" : "spa"] = max;
-  if (fast) evs.spe = max;
-  else evs.hp = max;
-  if (champions) evs.def = 2;
-  else evs.def = 4;
-  const nature = physical ? (fast ? "Jolly" : "Adamant") : fast ? "Timid" : "Modest";
-
-  const types: string[] = sp ? [...sp.types] : [];
-  const scored = legalMoves
-    .map((m) => gen.moves.get(toID(m)))
-    .filter((m): m is NonNullable<typeof m> => !!m && m.category !== "Status" && (m.basePower ?? 0) > 0 && !AVOID.has(m.id))
-    .filter((m) => m.category === (physical ? "Physical" : "Special"))
-    .map((m) => ({ m, score: Math.min(m.basePower, 120) * (types.includes(m.type) ? 1.5 : 1) }))
-    .sort((a, b) => b.score - a.score);
-  const moves: string[] = [];
-  const usedTypes = new Set<string>();
-  for (const { m } of scored) {
-    if (moves.length >= 4) break;
-    if (usedTypes.has(m.type)) continue;
-    usedTypes.add(m.type);
-    moves.push(m.name);
-  }
-
+/** Basic starting set: neutral nature, 31 IVs, no EVs, no item, no moves. */
+export function basicSet(species: string, abilities: string[], level: number): CalcSet {
   return {
     species,
     item: "",
     ability: abilities[0] ?? "",
     level,
-    nature,
-    evs,
+    nature: "Serious",
+    evs: zeroStats(),
     ivs: maxIvs(),
-    teraType: gen.num === 9 ? types[0] : undefined,
-    moves,
+    moves: [],
   };
 }
 

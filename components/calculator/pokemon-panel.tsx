@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import { ClipboardCopy, Upload } from "lucide-react";
+import { Check, ClipboardCopy, Pencil, Trash2, Upload, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { TypeBadge } from "@/components/type-badge";
 import { STAT_KEYS, STAT_LABEL, type StatKey } from "@/lib/showdown-text";
@@ -31,8 +31,11 @@ export function PokemonPanel({
   onPick,
   sprite,
   // sets
-  setOptions,
+  setGroups,
   onLoadSet,
+  savedSetName,
+  onRenameSet,
+  onDeleteSet,
   onImport,
   onExport,
   // data
@@ -54,8 +57,12 @@ export function PokemonPanel({
   picks: PickOption[];
   onPick: (key: string) => void;
   sprite?: string;
-  setOptions: string[];
-  onLoadSet: (label: string) => void;
+  setGroups: { label: string; options: { value: string; text: string }[] }[];
+  onLoadSet: (key: string) => void;
+  /** Name of the imported set that's loaded, if any (enables rename/delete) */
+  savedSetName?: string;
+  onRenameSet?: (name: string) => void;
+  onDeleteSet?: () => void;
   onImport: () => void;
   onExport: () => Promise<boolean>;
   legalMoves: string[];
@@ -67,6 +74,8 @@ export function PokemonPanel({
 }) {
   const [search, setSearch] = useState("");
   const [copied, setCopied] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const champions = gen.num === 0;
   const evMax = champions ? 32 : 252;
   const evTotalMax = champions ? 66 : 510;
@@ -147,7 +156,7 @@ export function PokemonPanel({
       {showRoster && (
         <div className="flex flex-wrap gap-1">
           {picks.map((p) => {
-            const active = toID(p.species) === toID(set.species) && (!p.key.startsWith("imp:") || side.setLabel === p.key.slice(4));
+            const active = toID(p.species) === toID(set.species);
             return (
               <button
                 key={p.key}
@@ -167,19 +176,85 @@ export function PokemonPanel({
         </div>
       )}
 
-      {/* ── Identity ──────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 rounded-lg bg-muted/40 p-2">
+      {/* ── Identity + set picker ───────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg bg-muted/40 p-2">
         {sprite ? (
           <Image src={sprite} alt="" width={64} height={64} className="size-16 object-contain" />
         ) : (
           <div className="size-16" />
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-lg font-black">{set.nickname || set.species}</p>
+          <p className="truncate text-lg font-black">{set.species}</p>
           <div className="mt-0.5 flex flex-wrap items-center gap-1">
             {species?.types.map((t) => <TypeBadge key={t} type={t} />)}
             {!species && <span className="text-xs text-red-400">Not in this generation&apos;s calc</span>}
           </div>
+        </div>
+        <div className="w-full space-y-1 sm:w-56">
+          <p className="text-[10px] uppercase text-muted-foreground">Set</p>
+          {renaming !== null ? (
+            <form
+              className="flex gap-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                onRenameSet?.(renaming);
+                setRenaming(null);
+              }}
+            >
+              <input value={renaming} onChange={(e) => setRenaming(e.target.value)} maxLength={40} autoFocus className={sel} />
+              <button type="submit" title="Save name" className="rounded-md border px-1.5 hover:bg-muted"><Check size={14} /></button>
+              <button type="button" title="Cancel" onClick={() => setRenaming(null)} className="rounded-md border px-1.5 hover:bg-muted"><X size={14} /></button>
+            </form>
+          ) : (
+            <div className="flex gap-1">
+              <select
+                value={side.setLabel}
+                onChange={(e) => {
+                  setConfirmDelete(false);
+                  onLoadSet(e.target.value);
+                }}
+                className={`${sel} min-w-0 flex-1`}
+              >
+                {!setGroups.some((g) => g.options.some((o) => o.value === side.setLabel)) && (
+                  <option value={side.setLabel}>{side.setLabel ? "Custom" : "Loading…"}</option>
+                )}
+                {setGroups.map((g) =>
+                  g.label ? (
+                    <optgroup key={g.label} label={g.label}>
+                      {g.options.map((o) => <option key={o.value} value={o.value}>{o.text}</option>)}
+                    </optgroup>
+                  ) : (
+                    g.options.map((o) => <option key={o.value} value={o.value}>{o.text}</option>)
+                  ),
+                )}
+              </select>
+              {savedSetName !== undefined && !confirmDelete && (
+                <>
+                  <button title="Rename set" onClick={() => setRenaming(savedSetName)} className="rounded-md border px-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+                    <Pencil size={13} />
+                  </button>
+                  <button title="Delete set" onClick={() => setConfirmDelete(true)} className="rounded-md border px-1.5 text-muted-foreground hover:bg-muted hover:text-red-400">
+                    <Trash2 size={13} />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+          {confirmDelete && savedSetName !== undefined && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-muted-foreground">Delete &quot;{savedSetName}&quot;?</span>
+              <button
+                onClick={() => {
+                  onDeleteSet?.();
+                  setConfirmDelete(false);
+                }}
+                className="rounded bg-red-600 px-2 py-0.5 font-semibold text-white hover:bg-red-500"
+              >
+                Delete
+              </button>
+              <button onClick={() => setConfirmDelete(false)} className="text-muted-foreground hover:text-foreground">Cancel</button>
+            </div>
+          )}
         </div>
         {!champions && (
           <label className="w-16 text-center text-[10px] uppercase text-muted-foreground">
@@ -188,14 +263,6 @@ export function PokemonPanel({
           </label>
         )}
       </div>
-
-      <label className="block space-y-1 text-xs text-muted-foreground">
-        Set
-        <select value={side.setLabel} onChange={(e) => onLoadSet(e.target.value)} className={sel}>
-          {!setOptions.includes(side.setLabel) && <option value={side.setLabel}>{side.setLabel || "Custom"}</option>}
-          {setOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-      </label>
 
       {/* ── Stats ─────────────────────────────────────────────────────── */}
       <div className="overflow-x-auto">
