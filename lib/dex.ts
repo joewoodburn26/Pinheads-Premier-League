@@ -110,9 +110,34 @@ function learnsetOf(species: SpeciesEntry, mode: FormatMode): Set<string> {
       const [i, gen] = pair.split(".");
       if (Number(gen) <= mode.maxGen) set.add(DATA.moves[Number(i)][0]);
     }
+    // Showdown only lists a forme's extra moves (Rotom-Wash: just Hydro Pump);
+    // the rest come from the base Pokémon.
+    const base = baseOf(species);
+    if (base && set.size < 10) for (const id of learnsetOf(base, mode)) set.add(id);
   }
   learnsetCache.set(key, set);
   return set;
+}
+
+function baseOf(species: SpeciesEntry): SpeciesEntry | undefined {
+  const dash = species.n.indexOf("-");
+  if (dash < 0) return undefined;
+  const base = DATA.species[toId(species.n.slice(0, dash))];
+  return base && base !== species ? base : undefined;
+}
+
+const moveNameById = new Map(DATA.moves.map(([id, name]) => [id, name]));
+
+/** Move names this Pokémon can learn in the format, sorted A–Z (for the damage calculator). */
+export function learnableMoveNames(p: Pick<Pokemon, "name" | "dexNumber">, format?: string): string[] {
+  return [...learnableMoves(p, format)]
+    .map((id) => moveNameById.get(id) ?? id)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/** Pokémon Showdown's name for this Pokémon ("Hisuian Electrode" → "Electrode-Hisui"). */
+export function showdownName(p: Pick<Pokemon, "name" | "dexNumber">): string | undefined {
+  return findSpecies(p)?.n;
 }
 
 /** Move ids this Pokémon can learn in the season's format (empty if unmatched). */
@@ -162,4 +187,18 @@ export function filterAvailable<T extends Pick<Pokemon, "name" | "dexNumber">>(l
   const mode = formatMode(format);
   if (mode.kind === "natdex" && mode.maxGen >= 9) return list;
   return list.filter((p) => isAvailable(p, format));
+}
+
+/** Same as learnableMoveNames, looked up by Showdown species name (imported sets). */
+export function learnableMoveNamesForSpecies(speciesName: string, format?: string): string[] | undefined {
+  const species = DATA.species[toId(speciesName)];
+  if (!species) return undefined;
+  return [...learnsetOf(species, formatMode(format))]
+    .map((id) => moveNameById.get(id) ?? id)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/** Abilities by Showdown species name (imported sets). */
+export function abilitiesForSpecies(speciesName: string): string[] {
+  return DATA.species[toId(speciesName)]?.a ?? [];
 }
