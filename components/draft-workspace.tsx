@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useMemo, useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, X, LayoutList, LayoutGrid, ChevronUp, ChevronDown, Share2, Download, Trash2, Bookmark, Swords, Sparkles } from "lucide-react";
+import { Search, X, LayoutList, LayoutGrid, ChevronUp, ChevronDown, Share2, Download, Trash2, Bookmark, Swords, Sparkles, SlidersHorizontal } from "lucide-react";
 import { savePlan } from "@/lib/plan-actions";
 import { TypeBadge } from "@/components/type-badge";
 import { Button } from "@/components/ui/button";
@@ -494,8 +494,10 @@ export function exportToPdf(slots: BuilderSlot[], budget: number, seasonName?: s
 // ─── Team Builder sidebar ─────────────────────────────────────────────────────
 
 function TeamBuilder({
-  slots, onRemove, onNoteChange, onClear, budget, seasonName, planPanel,
+  slots, onRemove, onNoteChange, onClear, budget, seasonName, planPanel, inSheet = false,
 }: {
+  /** Shown in the phone slide-up sheet (no sticky columns) */
+  inSheet?: boolean;
   /** Save-plan controls (shown when the member can save plans) */
   planPanel?: React.ReactNode;
   slots: BuilderSlot[];
@@ -523,7 +525,7 @@ function TeamBuilder({
   return (
     <div className="grid gap-4 lg:grid-cols-2 items-start">
       {/* LEFT — team list, sticky */}
-      <div className="sticky top-[100px] space-y-3">
+      <div className={`${inSheet ? "" : "sticky top-[100px]"} space-y-3`}>
         <Card className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-black">Team Builder</h2>
@@ -613,7 +615,7 @@ function TeamBuilder({
       </div>
 
       {/* RIGHT — analytics, sticky */}
-      <div className="sticky top-[100px] space-y-3">
+      <div className={`${inSheet ? "" : "sticky top-[100px]"} space-y-3`}>
         <Card className="p-4 space-y-2">
           <h3 className="font-bold text-sm">Type Coverage</h3>
           <p className="text-xs text-muted-foreground">↑ = your hits · ↓ = your weaknesses</p>
@@ -822,6 +824,10 @@ export function DraftWorkspace({
 
   // ── View ──
   const [view, setView] = useState<ViewMode>("list");
+  // Phone-only UI state
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   // ── Builder state ──
   const [slots, setSlots] = useState<BuilderSlot[]>([]);
@@ -934,19 +940,28 @@ export function DraftWorkspace({
   }, [filtered]);
 
   // ── Filter bar ──
+  // Phones: only the name search shows until "Filters" is tapped (max-md:* = under 768px only)
+  const activeFilters = [minPts, maxPts, abilityQuery].filter(Boolean).length + selectedMoves.length + types.length;
+  const phoneHidden = filtersOpen ? "" : "max-md:hidden";
   const filterBar = (
-    <div className="space-y-3 rounded-lg border bg-card p-4">
-      <div className="grid gap-3 sm:grid-cols-[1fr_110px_110px]">
-        <label className="relative">
+    <div className="space-y-3 rounded-lg border bg-card p-4 max-md:p-3">
+      <div className="grid gap-3 sm:grid-cols-[1fr_110px_110px] max-md:grid-cols-6">
+        <label className="relative max-md:col-span-4">
           <Search className="absolute left-3 top-2.5 text-muted-foreground" size={16} />
           <Input className="pl-9" value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} placeholder="Search by name" />
         </label>
-        <Input type="number" placeholder="Min pts" value={minPts} onChange={e => { setMinPts(e.target.value); setPage(1); }} />
-        <Input type="number" placeholder="Max pts" value={maxPts} onChange={e => { setMaxPts(e.target.value); setPage(1); }} />
+        <button
+          onClick={() => setFiltersOpen(v => !v)}
+          className={`flex h-10 items-center justify-center gap-1.5 rounded-md border px-2 text-sm font-semibold md:hidden max-md:col-span-2 ${activeFilters ? "border-primary text-primary" : ""}`}
+        >
+          <SlidersHorizontal size={14} /> Filters{activeFilters ? ` (${activeFilters})` : ""}
+        </button>
+        <Input type="number" placeholder="Min pts" value={minPts} onChange={e => { setMinPts(e.target.value); setPage(1); }} className={`max-md:col-span-3 ${phoneHidden}`} />
+        <Input type="number" placeholder="Max pts" value={maxPts} onChange={e => { setMaxPts(e.target.value); setPage(1); }} className={`max-md:col-span-3 ${phoneHidden}`} />
       </div>
 
       {/* Moves + abilities */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className={`grid gap-3 sm:grid-cols-2 ${phoneHidden}`}>
         <div className="space-y-1.5">
           <form
             className="relative"
@@ -1006,8 +1021,8 @@ export function DraftWorkspace({
           </datalist>
         </label>
       </div>
-      {formatLabel && <p className="text-[11px] text-muted-foreground">Moves follow this season&apos;s format: {formatLabel}</p>}
-      <div>
+      {formatLabel && <p className={`text-[11px] text-muted-foreground ${phoneHidden}`}>Moves follow this season&apos;s format: {formatLabel}</p>}
+      <div className={phoneHidden}>
         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Type {types.length > 0 && `(${types.length} — must have ALL)`}
         </p>
@@ -1025,7 +1040,7 @@ export function DraftWorkspace({
       </div>
       {view === "list" && (
         <>
-          <div>
+          <div className={phoneHidden}>
             <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sort By</p>
             <div className="flex flex-wrap gap-1.5">
               {([
@@ -1062,7 +1077,7 @@ export function DraftWorkspace({
   );
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[2fr_1fr_1fr]">
+    <div className="grid gap-6 xl:grid-cols-[2fr_1fr_1fr] max-md:gap-4 max-md:pb-24">
       <section className="space-y-4 xl:col-span-1">        {/* View toggle */}
         <div className="flex items-center gap-2">
           <button onClick={() => setView("list")}
@@ -1086,36 +1101,43 @@ export function DraftWorkspace({
                 const canAdd = !inBuilder && slots.length < 10;
                 return (
                   <Card key={mon.id} onClick={() => toggleBuilder(mon)}
-                    className={`p-4 cursor-pointer transition-all ${
+                    className={`p-4 max-md:p-2.5 cursor-pointer transition-all ${
                       inBuilder ? "border-primary/60 bg-primary/5 ring-1 ring-primary/40" :
                       canAdd    ? "hover:border-primary/40 hover:bg-muted/30" :
                       "opacity-50 cursor-not-allowed"
                     }`}>
-                    <div className="flex items-center gap-4">
-                      <Image src={mon.spriteUrl} alt={mon.name} width={128} height={128} className="size-28 shrink-0 object-contain" />
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs text-muted-foreground font-mono">#{String(mon.dexNumber).padStart(4, "0")}</span>
-                          <h3 className="text-lg font-bold leading-tight">{mon.name}</h3>
+                    <div className="flex items-center gap-4 max-md:gap-2.5">
+                      <Image src={mon.spriteUrl} alt={mon.name} width={128} height={128} className="size-28 shrink-0 object-contain max-md:size-14" />
+                      <div className="min-w-0 flex-1 space-y-2 max-md:space-y-1">
+                        <div className="flex flex-wrap items-center gap-2 max-md:gap-1.5">
+                          <span className="text-xs text-muted-foreground font-mono max-md:hidden">#{String(mon.dexNumber).padStart(4, "0")}</span>
+                          <h3 className="text-lg font-bold leading-tight max-md:text-base">{mon.name}</h3>
                           <div className="flex flex-wrap gap-1">{pokemonTypesFor(mon).map(t => <TypeBadge key={t} type={t} />)}</div>
                           {inBuilder && <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">✓ Added</span>}
                         </div>
                         {(abilitiesById[mon.id]?.length ?? 0) > 0 && (
-                          <p className="text-xs text-muted-foreground">{abilitiesById[mon.id].join(" · ")}</p>
+                          <p className={`text-xs text-muted-foreground ${expanded === mon.id ? "" : "max-md:hidden"}`}>{abilitiesById[mon.id].join(" · ")}</p>
                         )}
-                        <div className="grid max-w-md grid-cols-2 gap-x-6 gap-y-1">
+                        <div className={`grid max-w-md grid-cols-2 gap-x-6 gap-y-1 max-md:gap-x-3 ${expanded === mon.id ? "" : "max-md:hidden"}`}>
                           {[0, 3, 1, 4, 2, 5].map(i => {
                             const { key, label } = STAT_KEYS[i];
                             return <StatBar key={key} label={label} value={mon[key]} max={STAT_BAR_MAX} />;
                           })}
                         </div>
                       </div>
-                      <div className="flex shrink-0 flex-col items-end gap-2 self-stretch">
+                      <div className="flex shrink-0 flex-col items-end gap-2 self-stretch max-md:gap-1">
                         <div className="text-right">
-                          <p className="text-3xl font-black leading-none">{mon.pointValue}</p>
+                          <p className="text-3xl font-black leading-none max-md:text-2xl">{mon.pointValue}</p>
                           <p className="text-xs text-muted-foreground">pts</p>
                         </div>
-                        <div className="mt-auto rounded-md bg-muted px-2 py-1 text-right">
+                        <button
+                          onClick={e => { e.stopPropagation(); setExpanded(x => (x === mon.id ? null : mon.id)); }}
+                          className="mt-auto flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[11px] text-muted-foreground md:hidden"
+                          aria-label="Show stats"
+                        >
+                          BST {mon.bst} {expanded === mon.id ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                        </button>
+                        <div className="mt-auto rounded-md bg-muted px-2 py-1 text-right max-md:hidden">
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">BST</p>
                           <p className="font-mono text-sm font-black leading-none">{mon.bst}</p>
                         </div>
@@ -1140,7 +1162,7 @@ export function DraftWorkspace({
           <div className="space-y-0">
             {tierGroups.map(([pts, mons]) => (
               <div key={pts}>
-                <div className="sticky top-[90px] z-20 flex items-center gap-3 border-b border-t bg-background/95 backdrop-blur px-2 py-2">
+                <div className="sticky top-[90px] max-md:top-[56px] z-20 flex items-center gap-3 border-b border-t bg-background/95 backdrop-blur px-2 py-2">
                   <span className="text-2xl font-black">{pts}</span>
                   <span className="text-sm font-semibold text-muted-foreground">pts</span>
                   <span className="ml-auto text-xs text-muted-foreground">{mons.length} Pokémon</span>
@@ -1159,7 +1181,7 @@ export function DraftWorkspace({
       </section>
 
       {/* ── TEAM BUILDER — right side, spans 2 cols, sticky ── */}
-      <aside className="xl:col-span-2">
+      <aside className="xl:col-span-2 max-md:hidden">
         <div className="sticky top-[100px]">
           <TeamBuilder
             slots={slots}
@@ -1176,6 +1198,52 @@ export function DraftWorkspace({
           />
         </div>
       </aside>
+
+      {/* ── Phones: team bar pinned to the bottom, opens the Team Builder ── */}
+      <button
+        onClick={() => setSheetOpen(true)}
+        className="fixed inset-x-3 bottom-3 z-40 flex items-center gap-3 rounded-xl border border-primary/40 bg-card/95 px-4 py-3 text-left shadow-2xl backdrop-blur md:hidden"
+      >
+        <div className="flex -space-x-2">
+          {slots.slice(0, 4).map(s => (
+            <Image key={s.pokemon.id} src={s.pokemon.spriteUrl} alt="" width={32} height={32} className="size-8 rounded-full bg-muted object-contain ring-2 ring-card" />
+          ))}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black">My team · {slots.length} Pokémon</p>
+          <p className={`text-xs ${slots.reduce((n, s) => n + s.pokemon.pointValue, 0) > budget ? "text-red-400" : "text-muted-foreground"}`}>
+            {slots.reduce((n, s) => n + s.pokemon.pointValue, 0)} / {budget} pts{planContext?.canSave ? " · tap to save a plan" : ""}
+          </p>
+        </div>
+        <ChevronUp size={18} className="text-muted-foreground" />
+      </button>
+      {sheetOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
+          <button className="absolute inset-0 bg-black/60" onClick={() => setSheetOpen(false)} aria-label="Close team" />
+          <div className="absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-y-auto rounded-t-2xl border-t bg-background p-3 pb-8 shadow-2xl">
+            <div className="sticky top-0 z-10 -mx-3 -mt-3 mb-2 flex items-center justify-between bg-background/95 px-4 py-3 backdrop-blur">
+              <span className="mx-auto h-1 w-10 rounded-full bg-white/20" />
+              <button onClick={() => setSheetOpen(false)} className="absolute right-3 rounded-md p-1.5 text-muted-foreground hover:bg-muted" aria-label="Close">
+                <X size={18} />
+              </button>
+            </div>
+            <TeamBuilder
+              inSheet
+            slots={slots}
+            onRemove={id => setSlots(prev => prev.filter(s => s.pokemon.id !== id))}
+            onNoteChange={updateNote}
+            onClear={() => setSlots([])}
+            budget={budget}
+            seasonName={seasonName}
+            planPanel={
+              planContext ? (
+                <PlanPanel slots={slots} context={planContext} loaded={loadedPlan} onLoadedChange={setLoadedPlan} />
+              ) : undefined
+            }
+          />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

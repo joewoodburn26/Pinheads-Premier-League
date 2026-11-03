@@ -282,7 +282,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
         </section>
 
         {/* ── Results + MVPs ──────────────────────────────────────────────── */}
-        <section className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+        <section className="grid gap-6 lg:grid-cols-[1.4fr_1fr] max-md:grid-cols-[minmax(0,1fr)]">
           {/* Season results */}
           <Card className="p-5" style={{ borderColor: `rgba(${rgb1}, 0.2)` }}>
             <h2 className="mb-4 flex items-center gap-2 text-lg font-black">

@@ -214,6 +214,7 @@ export function ReportPanel({
           away={away}
           homeRoster={preview.home}
           awayRoster={preview.away}
+          others={preview.others ?? []}
           onChange={(d) => updateDraft(i, d)}
         />
       ))}
@@ -288,7 +289,7 @@ export function ReportPanel({
 // ── One game ─────────────────────────────────────────────────────────────────
 
 function GameBlock({
-  index, game, home, away, homeRoster, awayRoster, onChange,
+  index, game, home, away, homeRoster, awayRoster, others, onChange,
 }: {
   index: number;
   game: GameDraft;
@@ -296,9 +297,14 @@ function GameBlock({
   away: TeamInfo;
   homeRoster: RosterMon[];
   awayRoster: RosterMon[];
+  /** Pokédex entries for Pokémon that aren't on either roster (swapped in/out) */
+  others: RosterMon[];
   onChange: (g: GameDraft) => void;
 }) {
-  const sprites = useMemo(() => new Map([...homeRoster, ...awayRoster].map((r) => [r.id, r])), [homeRoster, awayRoster]);
+  const sprites = useMemo(
+    () => new Map([...homeRoster, ...awayRoster, ...others].map((r) => [r.id, r])),
+    [homeRoster, awayRoster, others],
+  );
 
   if (game.error) {
     return (
@@ -336,6 +342,7 @@ function GameBlock({
             const picked = game.picks[k];
             const mon = picked ? sprites.get(picked) : undefined;
             const auto = (m.side === homeSide ? m.homeMatch : m.awayMatch) === picked && !!picked;
+            const offRoster = !!picked && !(forHome ? homeRoster : awayRoster).some((r) => r.id === picked);
             return (
               <div key={k} className="contents">
                 <div className="flex min-w-0 items-center gap-1.5">
@@ -345,7 +352,14 @@ function GameBlock({
                     <span className="grid size-7 shrink-0 place-items-center text-yellow-400"><AlertTriangle size={14} /></span>
                   )}
                   {auto ? (
-                    <span className="truncate font-semibold">{mon?.name ?? m.species}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate font-semibold">{mon?.name ?? m.species}</span>
+                      {offRoster && (
+                        <span className="shrink-0 rounded border border-sky-500/40 px-1 text-[10px] text-sky-300" title="Not on this team's roster now (swapped in or out). Its stats still count for this team.">
+                          off roster
+                        </span>
+                      )}
+                    </span>
                   ) : (
                     <select
                       value={picked}
@@ -355,6 +369,9 @@ function GameBlock({
                     >
                       <option value="">{m.species}: don&apos;t count</option>
                       {roster.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      {others.filter((o) => !roster.some((r) => r.id === o.id)).map((o) => (
+                        <option key={o.id} value={o.id}>{o.name} (off roster)</option>
+                      ))}
                     </select>
                   )}
                 </div>

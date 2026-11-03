@@ -7,7 +7,7 @@
 
 import { revalidatePath } from "next/cache";
 import { denied, requireSignedIn } from "@/lib/auth";
-import { getRoster } from "@/lib/data";
+import { getPokemon, getRoster } from "@/lib/data";
 import { showdownName } from "@/lib/dex";
 import { fetchAndParseReplay } from "@/lib/replay-parser";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -27,9 +27,15 @@ export type ReportMon = {
   /** Showdown's species name, as it appeared in the replay */
   species: string;
   side: Side;
-  /** Roster Pokémon this species matches on each team (null = not on that roster) */
+  /**
+   * Pokémon this species counts as for each team: its roster Pokémon, or (for Pokémon
+   * swapped in or out during the season) the Pokédex entry. null = not found at all.
+   */
   homeMatch: string | null;
   awayMatch: string | null;
+  /** Whether that match is on the team's current roster */
+  homeOnRoster: boolean;
+  awayOnRoster: boolean;
   games: number;
   kos: number;
   deaths: number;
@@ -53,6 +59,8 @@ export type ReportPreview = {
   games: ReportGame[];
   home: RosterMon[];
   away: RosterMon[];
+  /** Pokédex entries for Pokémon in the replays that aren't on either roster */
+  others: RosterMon[];
 };
 
 export type { StatDelta } from "@/lib/report-store";
@@ -91,9 +99,12 @@ export async function readMatchReplays(
   const links = urls.map((u) => u.trim()).filter(Boolean).slice(0, 3);
   if (!links.length) return { error: "Paste at least one replay link." };
 
-  const [homeRoster, awayRoster] = await Promise.all([rosterOf(homeTeamId), rosterOf(awayTeamId)]);
+  const [homeRoster, awayRoster, dex] = await Promise.all([rosterOf(homeTeamId), rosterOf(awayTeamId), getPokemon()]);
   const matchHome = matcher(homeRoster);
   const matchAway = matcher(awayRoster);
+  // Coaches can swap Pokémon early in the season, so anything in the Pokédex counts too
+  const matchDex = matcher(dex);
+  const others = new Map<string, Pokemon>();
 
   const legacy = new Set<string>();
   if (hasSupabaseEnv()) {
@@ -113,15 +124,23 @@ export async function readMatchReplays(
       }
       const homeSide: Side | null = score.p1 > score.p2 ? "p1" : score.p2 > score.p1 ? "p2" : null;
 
-      const mons: ReportMon[] = r.pokemon.map((m) => ({
-        species: m.name,
-        side: m.player,
-        homeMatch: matchHome(m.name)?.id ?? null,
-        awayMatch: matchAway(m.name)?.id ?? null,
-        games: m.gamesPlayed,
-        kos: m.kos,
-        deaths: m.deaths,
-      }));
+      const mons: ReportMon[] = r.pokemon.map((m) => {
+        const home = matchHome(m.name);
+        const away = matchAway(m.name);
+        const fromDex = home && away ? undefined : matchDex(m.name);
+        if (fromDex && (!home || !away)) others.set(fromDex.id, fromDex);
+        return {
+          species: m.name,
+          side: m.player,
+          homeMatch: (home ?? fromDex)?.id ?? null,
+          awayMatch: (away ?? fromDex)?.id ?? null,
+          homeOnRoster: !!home,
+          awayOnRoster: !!away,
+          games: m.gamesPlayed,
+          kos: m.kos,
+          deaths: m.deaths,
+        };
+      });
       games.push({
         url, p1: r.p1, p2: r.p2, winnerSide: r.winnerSide, homeSide, remaining: r.remaining, mons,
         legacy: legacy.has(url) || undefined,
@@ -135,7 +154,7 @@ export async function readMatchReplays(
   }
 
   const toRoster = (list: Pokemon[]): RosterMon[] => list.map((p) => ({ id: p.id, name: p.name, sprite: p.spriteUrl }));
-  return { preview: { games, home: toRoster(homeRoster), away: toRoster(awayRoster) } };
+  return { preview: { games, home: toRoster(homeRoster), away: toRoster(awayRoster), others: toRoster([...others.values()]) } };
 }
 
 // ── 2. Save ──────────────────────────────────────────────────────────────────

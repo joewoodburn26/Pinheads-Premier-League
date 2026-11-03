@@ -12,6 +12,8 @@ import type { PokemonStats } from "@/lib/types";
 
 interface StatsRow extends PokemonStats {
   teamName: string;
+  /** Used by this team earlier in the season but no longer on its roster */
+  former?: boolean;
 }
 
 function EditableStatRow({ row, canEdit }: { row: StatsRow; canEdit: boolean }) {
@@ -56,6 +58,11 @@ function EditableStatRow({ row, canEdit }: { row: StatsRow; canEdit: boolean }) 
         <div className="flex items-center gap-2">
           <Image src={mon.spriteUrl} alt={mon.name} width={32} height={32} className="size-7 object-contain" />
           <span className="font-semibold text-sm">{mon.name}</span>
+          {row.former && (
+            <span className="rounded border border-sky-500/40 px-1 text-[10px] text-sky-300" title="Was on this team earlier in the season">
+              swapped out
+            </span>
+          )}
         </div>
       </td>
       <td className="p-3 text-sm text-muted-foreground">{row.teamName}</td>
@@ -231,8 +238,8 @@ export function StatsClient({
             <SortBtn label="K/D" k="kd" />
           </div>
 
-          <div className="overflow-hidden rounded-lg border">
-            <table className="w-full text-sm">
+          <div className="overflow-hidden rounded-lg border max-md:overflow-x-auto">
+            <table className="w-full text-sm max-md:min-w-[520px]">
               <thead className="bg-muted text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="p-3 text-left">Pokémon</th>

@@ -89,11 +89,11 @@ export default async function HomePage() {
       </section>
 
       {/* ── Stats Highlights ──────────────────────────────────────────────── */}
-      <section className="grid gap-4 sm:grid-cols-2">
+      <section className="grid gap-4 sm:grid-cols-2 max-md:grid-cols-[minmax(0,1fr)]">
 
         {/* Standings Leader */}
         {leader && (
-          <Card className="p-5 flex items-center gap-5 border-[var(--theme-primary)]/30 bg-[var(--theme-primary)]/5">
+          <Card className="p-5 flex items-center gap-5 max-md:gap-3 max-md:p-4 border-[var(--theme-primary)]/30 bg-[var(--theme-primary)]/5">
             <div className="theme-accent-bg rounded-xl p-3">
               <Trophy size={28} className="text-white" />
             </div>
@@ -113,7 +113,7 @@ export default async function HomePage() {
                 alt=""
                 width={120}
                 height={120}
-                className="size-28 object-contain ml-auto shrink-0"
+                className="size-28 object-contain ml-auto shrink-0 max-md:size-16"
               />
             )}
           </Card>

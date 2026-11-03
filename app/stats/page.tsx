@@ -58,6 +58,28 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
     }
   }
 
+  // Pokémon a team used but has since swapped out: keep their stats visible
+  const shownKeys = new Set(stats.map((r) => `${r.teamId}|${r.pokemonId}`));
+  for (const s of rawStats) {
+    const key = `${s.teamId}|${s.pokemonId}`;
+    if (!s.pokemon || !s.teamId || shownKeys.has(key) || !teamNameMap[s.teamId]) continue;
+    const po = playoffTotals.get(key) ?? { games: 0, kos: 0, deaths: 0 };
+    const all = { games: s.gamesPlayed, kos: s.kos, deaths: s.deaths };
+    const shown =
+      stage === "playoffs" ? po
+      : stage === "regular" ? { games: Math.max(0, all.games - po.games), kos: Math.max(0, all.kos - po.kos), deaths: Math.max(0, all.deaths - po.deaths) }
+      : all;
+    if (!shown.games && !shown.kos && !shown.deaths) continue;
+    stats.push({
+      ...s,
+      teamId: s.teamId,
+      gamesPlayed: shown.games, kos: shown.kos, deaths: shown.deaths,
+      pokemon: s.pokemon,
+      teamName: teamNameMap[s.teamId],
+      former: true,
+    });
+  }
+
   return (
     <StatsClient
       stats={stats}

@@ -254,7 +254,7 @@ export function PointRestructureClient({
         </div>
 
         {/* Table — grouped when sorted by points, flat otherwise */}
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-hidden rounded-lg border max-md:overflow-x-auto">
           {groups ? (
             // Grouped by point value
             groups.map(([pts, mons]) => (
@@ -264,7 +264,7 @@ export function PointRestructureClient({
                   <span className="text-xs font-semibold text-muted-foreground">pts</span>
                   <span className="ml-auto text-xs text-muted-foreground">{mons.length} Pokémon</span>
                 </div>
-                <table className="w-full text-sm">
+                <table className="w-full text-sm max-md:min-w-[760px]">
                   <tbody>
                     {mons.map((p, idx) => <PokemonRow key={p.id} p={p} idx={idx} edits={edits} handleEdit={handleEdit} />)}
                   </tbody>
@@ -272,7 +272,7 @@ export function PointRestructureClient({
               </div>
             ))
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full text-sm max-md:min-w-[760px]">
               <thead className="bg-muted text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 <tr>
                   <th className="p-3 text-left w-16">#</th>
