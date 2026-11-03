@@ -1,538 +1,377 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { ExternalLink, Save, Trophy, Shield, X } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import Image from "next/image";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Crown, Loader2, Settings2, Shuffle, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { getBracketStructure, getBracketSeeding } from "@/lib/schedule-utils";
-import { saveBracketSlots, updatePlayoffMatch, type PlayoffMatch } from "@/lib/playoff-actions";
-import { winPct } from "@/lib/utils";
+import { Card } from "@/components/ui/card";
+import { MatchCard, type TeamVisual } from "@/components/schedule/match-card";
+import type { StandingRow } from "@/components/schedule/standings";
+import { bracketSize, roundCount, roundName } from "@/lib/bracket";
+import { seedPlayoffs, setFirstRoundTeam, type PlayoffMatch } from "@/lib/playoff-actions";
+import type { ScheduleMatch } from "@/lib/types";
 
-interface StandingRow {
-  teamId: string;
-  teamName: string;
-  wins: number;
-  losses: number;
-  seed: number;
+/** Playoff match → the shape the match card / report panel use (team 1 = "home") */
+function asScheduleMatch(m: PlayoffMatch): ScheduleMatch {
+  return {
+    id: m.id, seasonId: m.seasonId, week: 0,
+    homeTeam: m.team1Id ?? "", awayTeam: m.team2Id ?? "",
+    winner: m.winner, bo3Score: m.bo3Score, homeDiff: m.team1Diff, awayDiff: m.team2Diff,
+    replay1: m.replay1, replay2: m.replay2, replay3: m.replay3,
+  };
 }
 
-// ─── Drag data type ────────────────────────────────────────────────────────────
+/** Games each side won, from "2-1" and the winner */
+function gamesWon(m: PlayoffMatch): [number | null, number | null] {
+  const s = /^(\d)-(\d)$/.exec(m.bo3Score ?? "");
+  if (!s || !m.winner) return [null, null];
+  const hi = Number(s[1]);
+  const lo = Number(s[2]);
+  return m.winner === m.team1Id ? [hi, lo] : [lo, hi];
+}
 
-const DRAG_TYPE = "application/x-team-id";
+// ─── One match in the bracket ─────────────────────────────────────────────────
 
-// ─── Mini standings table ──────────────────────────────────────────────────────
-
-function MiniStandings({ standings }: { standings: StandingRow[] }) {
+function TeamLine({
+  team, seed, score, state, editing, options, onPick,
+}: {
+  team?: TeamVisual; seed: number | null; score: number | null; state: "win" | "loss" | "none";
+  editing?: boolean; options?: { id: string; label: string }[]; onPick?: (id: string) => void;
+}) {
   return (
-    <Card className="p-4 space-y-3">
-      <h3 className="font-bold text-sm">Standings (drag teams into bracket)</h3>
-      <div className="space-y-1">
-        {standings.map(row => (
-          <div
-            key={row.teamId}
-            draggable
-            onDragStart={e => {
-              e.dataTransfer.setData(DRAG_TYPE, row.teamId);
-              e.dataTransfer.effectAllowed = "copy";
-            }}
-            className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm cursor-grab active:cursor-grabbing hover:border-primary/40 transition-colors"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-xs font-black text-muted-foreground w-6 shrink-0">#{row.seed}</span>
-              <span className="font-semibold truncate">{row.teamName}</span>
-            </div>
-            <span className="text-xs text-muted-foreground shrink-0">
-              {row.wins}-{row.losses} · {winPct(row.wins, row.losses)}
-            </span>
-          </div>
-        ))}
-      </div>
-      <p className="text-xs text-muted-foreground italic">
-        Drag a team onto any bracket slot below. Teams stay listed here so you can drag them again.
-      </p>
-    </Card>
+    <div className={`flex items-center gap-2 px-2.5 py-1.5 ${state === "loss" ? "opacity-50" : ""}`}>
+      <span className="w-5 shrink-0 text-center text-[10px] font-black text-muted-foreground">{seed ?? ""}</span>
+      {team?.aceSprite ? (
+        <Image src={team.aceSprite} alt="" width={24} height={24} className="size-6 shrink-0 object-contain" />
+      ) : (
+        <span className="size-6 shrink-0" />
+      )}
+      {editing && options && onPick ? (
+        <select
+          value={team?.id ?? ""}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => onPick(e.target.value)}
+          className="min-w-0 flex-1 rounded border bg-background px-1 py-0.5 text-xs"
+        >
+          {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+      ) : (
+        <span className={`min-w-0 flex-1 truncate text-sm ${team ? (state === "win" ? "font-black" : "font-semibold") : "italic text-muted-foreground"}`}>
+          {team?.name ?? "TBD"}
+        </span>
+      )}
+      {score !== null && <span className={`text-sm font-black tabular-nums ${state === "win" ? "" : "text-muted-foreground"}`}>{score}</span>}
+      {state === "win" && score === null && <span className="text-[10px] font-bold text-green-400">W</span>}
+    </div>
   );
 }
 
-// ─── Slot drop target ──────────────────────────────────────────────────────────
-
-function SlotDropTarget({
-  label, teamId, teamName, placeholder, onDrop, onClear, locked = false,
+function BracketMatch({
+  m, visual, seedOf, selected, onSelect, editing, options, onPick,
 }: {
-  locked?: boolean;
-  label: string;
-  teamId: string | null;
-  teamName: string;
-  placeholder?: string;
-  onDrop: (teamId: string) => void;
-  onClear: () => void;
+  m: PlayoffMatch;
+  visual: (id: string | null) => TeamVisual | undefined;
+  seedOf: (m: PlayoffMatch, side: 1 | 2) => number | null;
+  selected: boolean;
+  onSelect: () => void;
+  editing: boolean;
+  options: { id: string; label: string }[];
+  onPick: (side: 1 | 2, id: string) => void;
 }) {
-  const [isOver, setIsOver] = useState(false);
-
+  const t1 = visual(m.team1Id);
+  const t2 = visual(m.team2Id);
+  if (m.isBye) {
+    return (
+      <div className="w-[230px] rounded-lg border border-dashed bg-card/40 text-muted-foreground">
+        <TeamLine
+          team={t1} seed={seedOf(m, 1)} score={null} state="none"
+          editing={editing && m.round === 1} options={options} onPick={(id) => onPick(1, id)}
+        />
+        <p className="border-t border-dashed px-2.5 py-0.5 text-[10px] uppercase tracking-wider">Bye · advances</p>
+      </div>
+    );
+  }
+  const [g1, g2] = gamesWon(m);
+  const state = (id: string | null): "win" | "loss" | "none" => (!m.winner ? "none" : m.winner === id ? "win" : "loss");
+  const accent = m.winner ? visual(m.winner)?.color : undefined;
   return (
-    <div
-      onDragOver={locked ? undefined : e => { e.preventDefault(); setIsOver(true); }}
-      onDragLeave={locked ? undefined : () => setIsOver(false)}
-      onDrop={locked ? undefined : e => {
-        e.preventDefault();
-        setIsOver(false);
-        const dropped = e.dataTransfer.getData(DRAG_TYPE);
-        if (dropped) onDrop(dropped);
-      }}
-      className={`flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
-        isOver ? "border-primary bg-primary/10 ring-2 ring-primary/40" :
-        teamId ? "border-border bg-muted/40" : "border-dashed border-muted-foreground/30 bg-muted/10"
-      }`}
+    <button
+      onClick={onSelect}
+      className={`w-[230px] divide-y divide-white/5 rounded-lg border bg-card text-left transition ${selected ? "ring-2 ring-primary" : "hover:border-white/30"}`}
+      style={accent ? { borderColor: `${accent}88` } : undefined}
     >
-      <span className="text-xs text-muted-foreground w-5 shrink-0">{label}</span>
-      <span className={`flex-1 font-semibold truncate ${teamId ? "" : "text-muted-foreground italic text-xs"}`}>
-        {teamId ? teamName : (placeholder ?? (locked ? "TBD" : "Drop team here"))}
-      </span>
-      {teamId && !locked && (
-        <button onClick={onClear} className="shrink-0 text-muted-foreground hover:text-destructive transition-colors">
-          <X size={14} />
-        </button>
-      )}
-    </div>
+      <TeamLine team={t1} seed={seedOf(m, 1)} score={g1} state={state(m.team1Id)}
+        editing={editing && m.round === 1} options={options} onPick={(id) => onPick(1, id)} />
+      <TeamLine team={t2} seed={seedOf(m, 2)} score={g2} state={state(m.team2Id)}
+        editing={editing && m.round === 1} options={options} onPick={(id) => onPick(2, id)} />
+    </button>
   );
 }
 
-// ─── Match result form (shown when "Set Result" clicked) ────────────────────────
-
-function MatchResultForm({
-  match, team1Name, team2Name, seasonId, onClose,
-}: {
-  match: PlayoffMatch; team1Name: string; team2Name: string;
-  seasonId: string; onClose: () => void;
-}) {
-  const [isPending, startTransition] = useTransition();
-  const [winner,   setWinner]   = useState(match.winner ?? "");
-  const [bo3Score, setBo3Score] = useState(match.bo3Score ?? "");
-  const [diff1,    setDiff1]    = useState(String(match.team1Diff ?? 0));
-  const [diff2,    setDiff2]    = useState(String(match.team2Diff ?? 0));
-  const [r1, setR1] = useState(match.replay1 ?? "");
-  const [r2, setR2] = useState(match.replay2 ?? "");
-  const [r3, setR3] = useState(match.replay3 ?? "");
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
-
-  function handleDiff1Change(val: string) {
-    setDiff1(val);
-    const n = parseInt(val);
-    if (!isNaN(n)) setDiff2(String(-n));
-  }
-  function handleDiff2Change(val: string) {
-    setDiff2(val);
-    const n = parseInt(val);
-    if (!isNaN(n)) setDiff1(String(-n));
-  }
-
-  function handleSave() {
-    const fd = new FormData();
-    fd.set("id", match.id);
-    fd.set("seasonId", seasonId);
-    fd.set("winner", winner);
-    fd.set("bo3Score", bo3Score);
-    fd.set("team1Diff", diff1);
-    fd.set("team2Diff", diff2);
-    fd.set("replay1", r1);
-    fd.set("replay2", r2);
-    fd.set("replay3", r3);
-    setError("");
-    startTransition(async () => {
-      try {
-        const result = await updatePlayoffMatch(fd);
-        if (!result.ok) return setError("error" in result && result.error ? result.error : "Couldn't save the result.");
-        setSaved(true);
-        setTimeout(() => setSaved(false), 1500);
-      } catch {
-        setError("Couldn't save the result. Try again.");
-      }
-    });
-  }
-
-  return (
-    <div className="mt-2 space-y-3 rounded-lg border bg-muted/20 p-3">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Winner</label>
-          <select value={winner} onChange={e => setWinner(e.target.value)}
-            className="w-full rounded-md border bg-background px-2 py-1.5 text-sm">
-            <option value="">— Select —</option>
-            <option value={match.team1Id ?? ""}>{team1Name}</option>
-            <option value={match.team2Id ?? ""}>{team2Name}</option>
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Bo3 Score</label>
-          <select value={bo3Score} onChange={e => setBo3Score(e.target.value)}
-            className="w-full rounded-md border bg-background px-2 py-1.5 text-sm">
-            <option value="">— Select —</option>
-            <option value="2-0">2-0</option>
-            <option value="2-1">2-1</option>
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{team1Name} Diff</label>
-          <Input type="number" value={diff1} onChange={e => handleDiff1Change(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{team2Name} Diff</label>
-          <Input type="number" value={diff2} onChange={e => handleDiff2Change(e.target.value)} />
-        </div>
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-3">
-        {[
-          { label: "Game 1 Replay", value: r1, set: setR1 },
-          { label: "Game 2 Replay", value: r2, set: setR2 },
-          { label: "Game 3 Replay", value: r3, set: setR3 },
-        ].map(({ label, value, set }) => (
-          <div key={label} className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</label>
-            <div className="flex gap-1">
-              <Input value={value} onChange={e => set(e.target.value)} placeholder="replay.pokemonshowdown.com/…" className="text-xs" />
-              {value && (
-                <a href={value} target="_blank" rel="noopener noreferrer"
-                  className="shrink-0 rounded-md border bg-muted px-2 flex items-center hover:bg-muted/80">
-                  <ExternalLink size={14} />
-                </a>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex items-center gap-3">
-        <Button onClick={handleSave} disabled={isPending}>
-          <Save size={14} className="mr-2" />
-          {isPending ? "Saving…" : "Save Result"}
-        </Button>
-        <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground">Close</button>
-        {error && <span className="text-xs text-red-400">{error}</span>}
-        {saved && <span className="text-xs text-green-400 font-semibold">✓ Saved</span>}
-      </div>
-    </div>
-  );
-}
-
-// ─── Bracket slot card ───────────────────────────────────────────────────────
-
-function BracketSlotCard({
-  round, slotIndex, team1, team2, match, seasonId, placeholder1, placeholder2,
-  onAssign, onClear, canSetup, canReport,
-}: {
-  canSetup: boolean;
-  canReport: boolean;
-  round: number; slotIndex: number;
-  team1: { id: string | null; name: string };
-  team2: { id: string | null; name: string };
-  match: PlayoffMatch | undefined;
-  seasonId: string;
-  placeholder1?: string;
-  placeholder2?: string;
-  onAssign: (round: number, slotIndex: number, side: 1 | 2, teamId: string) => void;
-  onClear: (round: number, slotIndex: number, side: 1 | 2) => void;
-}) {
-  const [showForm, setShowForm] = useState(false);
-  const bothFilled = team1.id && team2.id;
-
-  return (
-    <Card className={`p-3 space-y-2 ${match?.winner ? "border-primary/30" : ""}`}>
-      <SlotDropTarget label="1" locked={!canSetup} teamId={team1.id} teamName={team1.name} placeholder={placeholder1}
-        onDrop={tid => onAssign(round, slotIndex, 1, tid)}
-        onClear={() => onClear(round, slotIndex, 1)} />
-      <p className="text-center text-xs text-muted-foreground">vs</p>
-      <SlotDropTarget label="2" locked={!canSetup} teamId={team2.id} teamName={team2.name} placeholder={placeholder2}
-        onDrop={tid => onAssign(round, slotIndex, 2, tid)}
-        onClear={() => onClear(round, slotIndex, 2)} />
-
-      {bothFilled && match && !canReport && match.winner && (
-        <p className="pt-1 text-center text-xs font-bold text-primary">
-          {match.winner === match.team1Id ? team1.name : team2.name} won {match.bo3Score}
-        </p>
-      )}
-      {bothFilled && match && canReport && (
-        <div className="pt-1">
-          {match.winner ? (
-            <button onClick={() => setShowForm(s => !s)}
-              className="w-full text-center text-xs font-bold rounded-full bg-primary/10 border border-primary/30 px-2 py-1 text-primary hover:bg-primary/20 transition-colors">
-              {match.winner === match.team1Id ? team1.name : team2.name} won {match.bo3Score} — click to edit
-            </button>
-          ) : (
-            <button onClick={() => setShowForm(s => !s)}
-              className="w-full text-center text-xs font-semibold rounded-md border border-dashed px-2 py-1.5 text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors">
-              Set Result
-            </button>
-          )}
-          {showForm && (
-            <MatchResultForm match={match} team1Name={team1.name} team2Name={team2.name} seasonId={seasonId} onClose={() => setShowForm(false)} />
-          )}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-// ─── Main bracket builder ──────────────────────────────────────────────────────
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function PlayoffBracketBuilder({
-  standings, playoffMatches, seasonId, teamNameMap, canSetup = false, canReport = false,
+  standings, playoffMatches, seasonId, visuals, playoffTeams, canSetup = false, canReport = false,
 }: {
-  /** Admins and the owner arrange the bracket */
-  canSetup?: boolean;
-  /** Signed-in members enter results */
-  canReport?: boolean;
   standings: StandingRow[];
   playoffMatches: PlayoffMatch[];
   seasonId: string;
-  teamNameMap: Record<string, string>;
+  visuals: Record<string, TeamVisual>;
+  /** Season setting: teams that qualify (undefined = everyone) */
+  playoffTeams?: number;
+  /** Admins and the owner seed the bracket */
+  canSetup?: boolean;
+  /** Signed-in members report results */
+  canReport?: boolean;
 }) {
-  const [isPending, startTransition] = useTransition();
-  const [saved, setSaved] = useState(false);
-  const [saveError, setSaveError] = useState("");
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState("");
+  const [confirmReseed, setConfirmReseed] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mobileRound, setMobileRound] = useState<number | null>(null);
 
-  const structure = getBracketStructure(standings.length);
-  const seeding   = getBracketSeeding(standings.length);
-
-  // Map seed number -> team name (from current standings)
-  function seedTeamName(seed: number | null): string {
-    if (seed === null) return "";
-    const row = standings.find(s => s.seed === seed);
-    return row ? row.teamName : `Seed #${seed}`;
-  }
-
-  // Placeholder text for Round 1 slots
-  function round1Placeholder(slotIndex: number, side: 1 | 2): string | undefined {
-    const info = seeding.round1Seeds.find(r => r.slotIndex === slotIndex);
-    if (!info) return undefined;
-    const seed = side === 1 ? info.seed1 : info.seed2;
-    if (seed !== null) return `Seed #${seed} — ${seedTeamName(seed)}`;
-    // This side comes from a play-in winner
-    const dest = seeding.playInDestinations.find(d => d.round1SlotIndex === slotIndex && d.side === side);
-    if (dest) return `Winner of Play-In ${dest.playInIndex + 1} (#${dest.seed1} vs #${dest.seed2})`;
-    return undefined;
-  }
-
-  // Placeholder text for Play-In slots
-  function playInPlaceholder(playInIndex: number, side: 1 | 2): string | undefined {
-    const dest = seeding.playInDestinations.find(d => d.playInIndex === playInIndex);
-    if (!dest) return undefined;
-    const seed = side === 1 ? dest.seed1 : dest.seed2;
-    return `Seed #${seed} — ${seedTeamName(seed)}`;
-  }
-
-  // For non-Round-1 rounds (Round 2+), no specific seed placeholder — just generic
-  function laterRoundPlaceholder(): string | undefined {
-    return "Winner advances here";
-  }
-
-  // Local editable state: round -> slotIndex -> { team1Id, team2Id }
-  const initial: Record<string, { team1Id: string | null; team2Id: string | null }> = {};
-  for (const round of structure) {
-    for (let i = 0; i < round.slotCount; i++) {
-      const key = `${round.round}-${i}`;
-      const existing = playoffMatches.find(m => m.round === round.round && m.slotIndex === i);
-      initial[key] = { team1Id: existing?.team1Id ?? null, team2Id: existing?.team2Id ?? null };
-    }
-  }
-  const [slots, setSlots] = useState(initial);
-
-  function getName(teamId: string | null): string {
-    if (!teamId) return "";
-    return teamNameMap[teamId] ?? teamId;
-  }
-
-  function handleAssign(round: number, slotIndex: number, side: 1 | 2, teamId: string) {
-    const key = `${round}-${slotIndex}`;
-    setSlots(prev => ({
-      ...prev,
-      [key]: { ...prev[key], [side === 1 ? "team1Id" : "team2Id"]: teamId },
+  const qualifiers = Math.min(standings.length, playoffTeams ?? standings.length);
+  const rounds = useMemo(() => {
+    const byRound = new Map<number, PlayoffMatch[]>();
+    for (const m of playoffMatches) byRound.set(m.round, [...(byRound.get(m.round) ?? []), m]);
+    return [...byRound.entries()].sort((a, b) => a[0] - b[0]).map(([round, ms]) => ({
+      round,
+      name: ms[0]?.roundName || roundName(round, qualifiers),
+      matches: ms.sort((a, b) => a.slotIndex - b.slotIndex),
     }));
-  }
+  }, [playoffMatches, qualifiers]);
+  const hasBracket = rounds.length > 0;
+  const reported = playoffMatches.some((m) => m.winner && !m.isBye);
+  const final = rounds[rounds.length - 1]?.matches[0];
+  const champion = final?.winner ? visuals[final.winner] : undefined;
 
-  function handleClear(round: number, slotIndex: number, side: 1 | 2) {
-    const key = `${round}-${slotIndex}`;
-    setSlots(prev => ({
-      ...prev,
-      [key]: { ...prev[key], [side === 1 ? "team1Id" : "team2Id"]: null },
-    }));
-  }
+  const visual = (id: string | null) => (id ? visuals[id] : undefined);
+  const standingSeed = (id: string | null) => (id ? standings.find((r) => r.teamId === id)?.seed ?? null : null);
+  const seedOf = (m: PlayoffMatch, side: 1 | 2) =>
+    (side === 1 ? m.team1Seed : m.team2Seed) ?? standingSeed(side === 1 ? m.team1Id : m.team2Id);
+  const teamOptions = standings.map((r) => ({ id: r.teamId, label: `#${r.seed} ${r.teamName}` }));
 
-  function handleSave() {
-    const toSave: { round: number; roundName: string; slotIndex: number; team1Id: string | null; team2Id: string | null }[] = [];
-    for (const round of structure) {
-      for (let i = 0; i < round.slotCount; i++) {
-        const key = `${round.round}-${i}`;
-        toSave.push({
-          round: round.round,
-          roundName: round.roundName,
-          slotIndex: i,
-          team1Id: slots[key]?.team1Id ?? null,
-          team2Id: slots[key]?.team2Id ?? null,
-        });
-      }
-    }
-    setSaveError("");
-    startTransition(async () => {
+  function seed(reset = false) {
+    setError("");
+    start(async () => {
       try {
-        const result = await saveBracketSlots(seasonId, toSave);
-        if (!result.ok) return setSaveError("error" in result && result.error ? result.error : "Couldn't save the bracket.");
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
+        const res = await seedPlayoffs(seasonId, reset);
+        if (res.needsConfirm) return setConfirmReseed(true);
+        if (res.error) return setError(res.error);
+        setConfirmReseed(false);
+        setEditing(false);
+        router.refresh();
       } catch {
-        setSaveError("Couldn't save the bracket. Try again.");
+        setError("Couldn't seed the bracket. Try again.");
       }
     });
   }
 
-  // ── Split rounds into left half / right half / final for the converging bracket ──
-  const nonPlayInRounds = structure.filter(r => r.round >= 1);
-  const playInRound     = structure.find(r => r.round === 0);
-  const finalRound      = nonPlayInRounds[nonPlayInRounds.length - 1]; // slotCount === 1
-
-  function renderSlot(round: number, i: number) {
-    const key = `${round}-${i}`;
-    const slot = slots[key] ?? { team1Id: null, team2Id: null };
-    const match = playoffMatches.find(m => m.round === round && m.slotIndex === i);
-
-    let placeholder1: string | undefined;
-    let placeholder2: string | undefined;
-    if (round === 0) {
-      placeholder1 = playInPlaceholder(i, 1);
-      placeholder2 = playInPlaceholder(i, 2);
-    } else if (round === 1) {
-      placeholder1 = round1Placeholder(i, 1);
-      placeholder2 = round1Placeholder(i, 2);
-    } else {
-      placeholder1 = laterRoundPlaceholder();
-      placeholder2 = laterRoundPlaceholder();
-    }
-
-    return (
-      <BracketSlotCard
-        key={key}
-        round={round}
-        slotIndex={i}
-        team1={{ id: slot.team1Id, name: getName(slot.team1Id) }}
-        team2={{ id: slot.team2Id, name: getName(slot.team2Id) }}
-        match={match}
-        seasonId={seasonId}
-        placeholder1={placeholder1}
-        placeholder2={placeholder2}
-        onAssign={handleAssign}
-        onClear={handleClear}
-        canSetup={canSetup}
-        canReport={canReport}
-      />
-    );
+  function pick(matchId: string, side: 1 | 2, teamId: string) {
+    setError("");
+    start(async () => {
+      try {
+        const res = await setFirstRoundTeam(matchId, side, teamId);
+        if (res.error) return setError(res.error);
+        router.refresh();
+      } catch {
+        setError("Couldn't change that spot.");
+      }
+    });
   }
 
-  // Split slot indices into left half and right half for mirroring
-  function halves(round: { round: number; slotCount: number }) {
-    const half = round.slotCount / 2;
-    const left  = Array.from({ length: half }, (_, i) => i);
-    const right = Array.from({ length: half }, (_, i) => i + half);
-    return { left, right };
-  }
+  const selected = playoffMatches.find((m) => m.id === selectedId && !m.isBye);
+  const activeMobile = mobileRound ?? rounds.find((r) => r.matches.some((m) => !m.isBye && !m.winner))?.round ?? rounds[0]?.round;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-black">Playoffs</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {canSetup ? "Drag teams from standings into bracket slots · " : ""}Single elimination · Bo3 all rounds
-        </p>
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-black">Playoffs</h2>
+          <p className="text-sm text-muted-foreground">
+            {qualifiers === standings.length ? "All" : `Top ${qualifiers} of`} {standings.length} teams · single elimination · Bo3
+            {bracketSize(qualifiers) !== qualifiers ? ` · top ${bracketSize(qualifiers) - qualifiers} seed${bracketSize(qualifiers) - qualifiers === 1 ? "" : "s"} get a bye` : ""}
+          </p>
+        </div>
+        {canSetup && (
+          <div className="flex flex-wrap items-center gap-2">
+            {hasBracket && !reported && (
+              <Button variant="secondary" onClick={() => setEditing((v) => !v)} disabled={pending}>
+                <Settings2 size={14} className="mr-2" /> {editing ? "Done adjusting" : "Adjust seeds"}
+              </Button>
+            )}
+            <Button onClick={() => seed(false)} disabled={pending}>
+              {pending ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Shuffle size={14} className="mr-2" />}
+              {hasBracket ? "Re-seed from standings" : "Seed from standings"}
+            </Button>
+          </div>
+        )}
       </div>
 
-      {canSetup && <MiniStandings standings={standings} />}
+      {confirmReseed && (
+        <Card className="flex flex-wrap items-center gap-3 border-red-500/40 bg-red-500/5 p-4 text-sm">
+          <span>Playoff results have been reported. Re-seeding removes them and their stats.</span>
+          <Button onClick={() => seed(true)} disabled={pending} className="bg-red-600 text-white hover:bg-red-500">Re-seed anyway</Button>
+          <button onClick={() => setConfirmReseed(false)} className="text-muted-foreground hover:text-foreground">Cancel</button>
+        </Card>
+      )}
+      {error && <p className="text-sm text-red-400">✗ {error}</p>}
+      {editing && (
+        <p className="text-xs text-muted-foreground">
+          Pick a team for any first-round spot. If it&apos;s already in the bracket the two teams swap places. Seeds move with their team.
+        </p>
+      )}
 
-      {/* Play-In round (if present) — shown above the main bracket */}
-      {playInRound && (
-        <div className="space-y-3">
-          <h3 className="text-lg font-bold flex items-center gap-2">
-            <Shield size={18} className="text-orange-400" /> Play-In Round
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: playInRound.slotCount }).map((_, i) => (
-              <div key={i} className="w-full max-w-xs">{renderSlot(0, i)}</div>
+      {/* ── Champion ────────────────────────────────────────────────── */}
+      {champion && (
+        <div
+          className="relative flex items-center gap-4 overflow-hidden rounded-xl border px-5 py-4"
+          style={{ borderColor: `${champion.color}88`, background: `linear-gradient(90deg, ${champion.color}33, transparent)` }}
+        >
+          <Crown className="text-yellow-400" size={28} />
+          {champion.aceSprite && <Image src={champion.aceSprite} alt="" width={64} height={64} className="size-16 object-contain" />}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.2em] text-yellow-400">Champion</p>
+            <p className="text-2xl font-black">{champion.name}</p>
+            <p className="text-xs text-muted-foreground">{champion.coach}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── No bracket yet ──────────────────────────────────────────── */}
+      {!hasBracket && (
+        <Card className="space-y-3 p-5">
+          <p className="font-bold">The bracket hasn&apos;t been set yet.</p>
+          <p className="text-sm text-muted-foreground">
+            {canSetup ? "Seed it from the standings when the regular season ends." : "It appears here once an admin seeds it."} If the season ended today:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {standings.slice(0, qualifiers).map((r) => (
+              <span key={r.teamId} className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold">
+                <span className="text-muted-foreground">#{r.seed}</span>
+                {visuals[r.teamId]?.aceSprite && <Image src={visuals[r.teamId].aceSprite!} alt="" width={20} height={20} className="size-5 object-contain" />}
+                {r.teamName}
+              </span>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Converging bracket */}
-      <div className="space-y-3">
-        <h3 className="text-lg font-bold flex items-center gap-2">
-          <Trophy size={18} className="text-yellow-400" /> Bracket
-        </h3>
-
-        <div className="overflow-x-auto pb-4">
-          <div className="flex items-center justify-center gap-6 min-w-fit px-2">
-
-            {/* LEFT SIDE */}
-            <div className="flex items-center gap-6">
-              {nonPlayInRounds.slice(0, -1).map(round => {
-                const { left } = halves(round);
-                return (
-                  <div key={`left-${round.round}`} className="flex flex-col gap-6" style={{ minWidth: "220px" }}>
-                    <p className="text-center text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                      {round.roundName}
-                    </p>
-                    <div className="flex flex-1 flex-col justify-around gap-6">
-                      {left.map(i => <div key={i}>{renderSlot(round.round, i)}</div>)}
-                    </div>
+      {/* ── Bracket: desktop ────────────────────────────────────────── */}
+      {hasBracket && (
+        <div className="hidden overflow-x-auto pb-2 lg:block">
+          <div className="flex min-w-fit gap-8">
+            {rounds.map((r, ri) => {
+              const last = ri === rounds.length - 1;
+              const pairs = last ? [r.matches] : Array.from({ length: Math.ceil(r.matches.length / 2) }, (_, i) => r.matches.slice(i * 2, i * 2 + 2));
+              return (
+                <div key={r.round} className="flex flex-col">
+                  <p className={`mb-3 text-center text-xs font-bold uppercase tracking-wider ${last ? "text-yellow-400" : "text-muted-foreground"}`}>
+                    {last && <Trophy size={12} className="mr-1 inline" />}{r.name}
+                  </p>
+                  <div className="flex flex-1 flex-col">
+                    {pairs.map((pair, pi) => (
+                      <div key={pi} className="relative flex flex-1 flex-col">
+                        {pair.map((m) => (
+                          <div key={m.id} className={`relative flex flex-1 items-center py-2 ${ri > 0 ? "before:absolute before:-left-4 before:top-1/2 before:w-4 before:border-t-2 before:border-white/15" : ""}`}>
+                            <BracketMatch
+                              m={m} visual={visual} seedOf={seedOf}
+                              selected={selectedId === m.id}
+                              onSelect={() => setSelectedId(m.id === selectedId ? null : m.id)}
+                              editing={editing} options={teamOptions}
+                              onPick={(side, id) => pick(m.id, side, id)}
+                            />
+                          </div>
+                        ))}
+                        {!last && pair.length === 2 && (
+                          <div className="pointer-events-none absolute -right-4 bottom-1/4 top-1/4 w-4 rounded-r border-y-2 border-r-2 border-white/15" />
+                        )}
+                      </div>
+                    ))}
                   </div>
-                );
-              })}
-            </div>
-
-            {/* CENTER — Finals */}
-            {finalRound && (
-              <div className="flex flex-col items-center gap-2" style={{ minWidth: "220px" }}>
-                <p className="text-center text-xs font-bold uppercase tracking-wider text-yellow-400 mb-1">
-                  🏆 {finalRound.roundName}
-                </p>
-                {renderSlot(finalRound.round, 0)}
-              </div>
-            )}
-
-            {/* RIGHT SIDE — mirrored */}
-            <div className="flex items-center gap-6">
-              {[...nonPlayInRounds.slice(0, -1)].reverse().map(round => {
-                const { right } = halves(round);
-                return (
-                  <div key={`right-${round.round}`} className="flex flex-col gap-6" style={{ minWidth: "220px" }}>
-                    <p className="text-center text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                      {round.roundName}
-                    </p>
-                    <div className="flex flex-1 flex-col justify-around gap-6">
-                      {right.map(i => <div key={i}>{renderSlot(round.round, i)}</div>)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
+                </div>
+              );
+            })}
           </div>
         </div>
-      </div>
+      )}
 
-      {canSetup && (
-        <div className="flex items-center gap-3 sticky bottom-4">
-          <Button onClick={handleSave} disabled={isPending} className="text-base px-6 py-3">
-            <Save size={16} className="mr-2" />
-            {isPending ? "Saving Bracket…" : "Save Bracket"}
-          </Button>
-          {saved && <span className="text-sm text-green-400 font-semibold">✓ Bracket saved</span>}
-          {saveError && <span className="text-sm text-red-400">{saveError}</span>}
+      {/* ── Selected match (desktop) ────────────────────────────────── */}
+      {selected && (
+        <div className="hidden lg:block">
+          {selected.team1Id && selected.team2Id ? (
+            <MatchCard
+              key={selected.id}
+              kind="playoff"
+              label={`${rounds.find((r) => r.round === selected.round)?.name ?? "Playoffs"} · match ${selected.slotIndex + 1}`}
+              match={asScheduleMatch(selected)}
+              home={visuals[selected.team1Id]}
+              away={visuals[selected.team2Id]}
+              canReport={canReport}
+            />
+          ) : (
+            <Card className="p-4 text-sm text-muted-foreground">Waiting for the previous round to finish.</Card>
+          )}
         </div>
       )}
-      {!canReport && (
-        <a href="/login?next=/schedule" className="text-xs text-muted-foreground underline hover:text-foreground">
-          Sign in to report results
-        </a>
+      {hasBracket && !selected && (
+        <p className="hidden text-xs text-muted-foreground lg:block">Click a match to see it{canReport ? " or report its result" : ""}.</p>
+      )}
+
+      {/* ── Bracket: phones (one round at a time) ───────────────────── */}
+      {hasBracket && (
+        <div className="space-y-3 lg:hidden">
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {rounds.map((r) => (
+              <button
+                key={r.round}
+                onClick={() => setMobileRound(r.round)}
+                className={`shrink-0 rounded-md border px-3 py-1.5 text-xs font-semibold ${activeMobile === r.round ? "border-primary bg-primary/15 text-primary" : "text-muted-foreground"}`}
+              >
+                {r.name}
+              </button>
+            ))}
+          </div>
+          {rounds.filter((r) => r.round === activeMobile).map((r) => {
+            const byes = r.matches.filter((m) => m.isBye);
+            return (
+              <div key={r.round} className="space-y-3">
+                {r.matches.filter((m) => !m.isBye).map((m, i) =>
+                  m.team1Id && m.team2Id ? (
+                    <MatchCard
+                      key={m.id}
+                      kind="playoff"
+                      label={`${r.name} · match ${i + 1}`}
+                      match={asScheduleMatch(m)}
+                      home={visuals[m.team1Id]}
+                      away={visuals[m.team2Id]}
+                      canReport={canReport}
+                    />
+                  ) : (
+                    <Card key={m.id} className="p-3 text-sm text-muted-foreground">
+                      {visual(m.team1Id)?.name ?? "TBD"} vs {visual(m.team2Id)?.name ?? "TBD"}
+                    </Card>
+                  ),
+                )}
+                {byes.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Byes: {byes.map((m) => `#${seedOf(m, 1)} ${visual(m.team1Id)?.name ?? ""}`).join(", ")}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {hasBracket && rounds.length !== roundCount(qualifiers) && canSetup && (
+        <p className="text-xs text-yellow-400">
+          The number of playoff teams changed since the bracket was made. Re-seed to rebuild it.
+        </p>
       )}
     </div>
   );

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   clearMatchReport, readMatchReplays, saveMatchReport,
-  type ReportGame, type ReportPreview, type RosterMon, type StatDelta,
+  type MatchKind, type ReportGame, type ReportPreview, type RosterMon, type StatDelta,
 } from "@/lib/match-report";
 import type { ScheduleMatch } from "@/lib/types";
 
@@ -63,11 +63,14 @@ function summarize(drafts: GameDraft[], homeId: string, awayId: string) {
 }
 
 export function ReportPanel({
+  kind = "regular",
   match,
   home,
   away,
   onClose,
 }: {
+  /** Regular-season or playoff match (for playoffs, home = team 1) */
+  kind?: MatchKind;
   match: ScheduleMatch;
   home: TeamInfo;
   away: TeamInfo;
@@ -132,6 +135,7 @@ export function ReportPanel({
     startSave(async () => {
       try {
         const res = await saveMatchReport({
+          kind,
           matchId: match.id,
           winner: winner || null,
           bo3Score: score || null,
@@ -153,7 +157,7 @@ export function ReportPanel({
   function clear() {
     startSave(async () => {
       try {
-        const res = await clearMatchReport(match.id);
+        const res = await clearMatchReport(kind, match.id);
         if (res.error) return setError(res.error);
         if (res.notes?.length) setNotes(res.notes);
         router.refresh();

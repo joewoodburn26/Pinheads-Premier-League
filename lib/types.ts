@@ -4,6 +4,8 @@ export type Season = {
   draftBudget: number;
   rosterSize?: number;
   format?: string;          // e.g. "all", "gen9", "champs", "gen8" …
+  /** How many teams make the playoffs (undefined = everyone) */
+  playoffTeams?: number;
   activeSeason: boolean;
   archived: boolean;
   createdAt: string;

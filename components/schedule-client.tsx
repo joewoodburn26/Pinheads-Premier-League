@@ -114,7 +114,7 @@ function WeekStrip({ weeks, active, onPick, matches }: {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function ScheduleClient({
-  matches, teams, initialWeek, playoffMatches, seasonId, visuals, myTeamId, subtitle,
+  matches, teams, initialWeek, playoffMatches, seasonId, visuals, myTeamId, subtitle, playoffTeams,
   canReport = false, canSetupBracket = false,
 }: {
   matches: ScheduleMatch[];
@@ -126,6 +126,8 @@ export function ScheduleClient({
   visuals: Record<string, TeamVisual>;
   myTeamId?: string;
   subtitle: string;
+  /** Teams that make the playoffs (undefined = everyone) */
+  playoffTeams?: number;
   /** Signed-in members can report results */
   canReport?: boolean;
   /** Admins and the owner can arrange the playoff bracket */
@@ -139,7 +141,6 @@ export function ScheduleClient({
   const [week, setWeek] = useState(initialWeek && weeks.includes(initialWeek) ? initialWeek : currentWeek);
 
   const standings = useMemo(() => computeStandings(teams, matches), [teams, matches]);
-  const teamNameMap = Object.fromEntries(teams.map((t) => [t.id, t.teamName]));
   const visual = (id: string): TeamVisual =>
     visuals[id] ?? { id, name: id === BYE_ID ? "BYE" : "TBD", coach: "", logoUrl: null, aceSprite: null, color: "#64748b", color2: "#64748b" };
 
@@ -147,7 +148,13 @@ export function ScheduleClient({
   const games = weekMatches
     .filter((m) => !m.isBye && m.awayTeam !== BYE_ID)
     .sort((a, b) => Number(b.homeTeam === myTeamId || b.awayTeam === myTeamId) - Number(a.homeTeam === myTeamId || a.awayTeam === myTeamId));
-  const byes = weekMatches.filter((m) => m.isBye || m.awayTeam === BYE_ID);
+  // Off this week: saved bye rows, plus any team with no match that week (odd team counts)
+  const playing = new Set(games.flatMap((m) => [m.homeTeam, m.awayTeam]));
+  const byeIds = [
+    ...weekMatches.filter((m) => m.isBye || m.awayTeam === BYE_ID).map((m) => m.homeTeam),
+    ...teams.map((t) => t.id).filter((id) => !playing.has(id)),
+  ];
+  const byes = [...new Set(byeIds)].filter((id) => !playing.has(id));
   const done = games.filter((m) => m.winner).length;
 
   const tabBtn = (id: typeof tab, label: string, Icon: typeof Trophy) => (
@@ -201,12 +208,18 @@ export function ScheduleClient({
           </div>
           {games.length === 0 && <p className="text-sm text-muted-foreground">No matches this week.</p>}
 
-          {byes.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <Moon size={14} /> Bye:
-              {byes.map((m) => (
-                <span key={m.id} className="rounded-full border px-2.5 py-0.5 text-xs font-semibold text-foreground">{visual(m.homeTeam).name}</span>
-              ))}
+          {byes.length > 0 && games.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
+              <Moon size={14} /> Off this week:
+              {byes.map((id) => {
+                const v = visual(id);
+                return (
+                  <Link key={id} href={`/teams/${id}`} className="flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold text-foreground hover:bg-muted">
+                    {v.aceSprite && <Image src={v.aceSprite} alt="" width={20} height={20} className="size-5 object-contain" />}
+                    {v.name}
+                  </Link>
+                );
+              })}
             </div>
           )}
 
@@ -225,7 +238,8 @@ export function ScheduleClient({
           standings={standings}
           playoffMatches={playoffMatches}
           seasonId={seasonId}
-          teamNameMap={teamNameMap}
+          visuals={visuals}
+          playoffTeams={playoffTeams}
           canSetup={canSetupBracket}
           canReport={canReport}
         />

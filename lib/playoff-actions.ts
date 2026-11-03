@@ -1,185 +1,17 @@
 "use server";
 
-import { denied, requireAdmin, requireSignedIn } from "@/lib/auth";
+// Playoff bracket: seeding from the standings, admin adjustments, and reading it.
+// Results are reported through lib/match-report.ts (kind: "playoff"), which keeps
+// later rounds in sync via syncBracket.
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
-import { hasSupabaseEnv } from "@/lib/supabase/server";
+import { denied, requireAdmin } from "@/lib/auth";
+import { firstRound } from "@/lib/bracket";
+import { getSchedule, getTeams } from "@/lib/data";
+import { BYE_SCORE, bracketRows, syncBracket, undoImport } from "@/lib/report-store";
+import { computeStandings } from "@/components/schedule/standings";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-
-// ─── Save the entire bracket arrangement (team placements per slot) ──────────
-
-const slotSchema = z.object({
-  round: z.number().int(),
-  roundName: z.string(),
-  slotIndex: z.number().int(),
-  team1Id: z.string().nullable(),
-  team2Id: z.string().nullable(),
-});
-
-export async function saveBracketSlots(seasonId: string, slots: {
-  round: number; roundName: string; slotIndex: number;
-  team1Id: string | null; team2Id: string | null;
-}[]) {
-  const blocked = await denied(requireAdmin);
-  if (blocked) return { ok: false, error: blocked };
-  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase not configured" };
-  const supabase = createSupabaseAdminClient();
-  const parsed = slots.map(s => slotSchema.parse(s));
-
-  for (const slot of parsed) {
-    // Upsert — preserve existing winner/score/replays if the slot already exists
-    const { data: existing } = await supabase
-      .from("playoff_matches")
-      .select("id, team1_id, team2_id, winner")
-      .eq("season_id", seasonId)
-      .eq("round", slot.round)
-      .eq("slot_index", slot.slotIndex)
-      .maybeSingle();
-
-    if (existing) {
-      // If teams changed, clear the result (stale)
-      const teamsChanged = existing.team1_id !== slot.team1Id || existing.team2_id !== slot.team2Id;
-      await supabase
-        .from("playoff_matches")
-        .update({
-          round_name: slot.roundName,
-          team1_id: slot.team1Id,
-          team2_id: slot.team2Id,
-          ...(teamsChanged ? { winner: null, bo3_score: null, team1_diff: 0, team2_diff: 0, replay_1: null, replay_2: null, replay_3: null } : {}),
-        })
-        .eq("id", existing.id);
-    } else {
-      await supabase.from("playoff_matches").insert({
-        season_id: seasonId,
-        round: slot.round,
-        round_name: slot.roundName,
-        slot_index: slot.slotIndex,
-        team1_id: slot.team1Id,
-        team2_id: slot.team2Id,
-      });
-    }
-  }
-
-  revalidatePath("/schedule");
-  return { ok: true };
-}
-
-// ─── Update a single playoff match result ────────────────────────────────────
-
-export async function updatePlayoffMatch(formData: FormData) {
-  const blocked = await denied(requireSignedIn);
-  if (blocked) return { ok: false, error: blocked };
-  if (!hasSupabaseEnv()) return { ok: false };
-  const id        = z.string().min(1).parse(formData.get("id"));
-  const winner    = (formData.get("winner") as string) || null;
-  const bo3Score  = (formData.get("bo3Score") as string) || null;
-  const team1Diff = parseInt(formData.get("team1Diff") as string) || 0;
-  const team2Diff = parseInt(formData.get("team2Diff") as string) || 0;
-  const replay1   = (formData.get("replay1") as string) || null;
-  const replay2   = (formData.get("replay2") as string) || null;
-  const replay3   = (formData.get("replay3") as string) || null;
-  const seasonId  = z.string().min(1).parse(formData.get("seasonId"));
-
-  const supabase = createSupabaseAdminClient();
-
-  await supabase
-    .from("playoff_matches")
-    .update({
-      winner, bo3_score: bo3Score,
-      team1_diff: team1Diff, team2_diff: team2Diff,
-      replay_1: replay1, replay_2: replay2, replay_3: replay3,
-    })
-    .eq("id", id);
-
-  // ── Auto-advance winner to next round ──────────────────────────────────────
-  if (winner) {
-    const { data: match } = await supabase.from("playoff_matches").select("*").eq("id", id).single();
-    if (match) {
-      const nextRound = match.round + 1;
-      const nextSlotIndex = Math.floor(match.slot_index / 2);
-      const isTeam1Slot = match.slot_index % 2 === 0;
-
-      // Check if next round slot exists
-      const { data: nextSlot } = await supabase
-        .from("playoff_matches")
-        .select("*")
-        .eq("season_id", seasonId)
-        .eq("round", nextRound)
-        .eq("slot_index", nextSlotIndex)
-        .maybeSingle();
-
-      if (nextSlot) {
-        const updateField = isTeam1Slot ? { team1_id: winner } : { team2_id: winner };
-        // If the advancing team changed, clear any stale result in the next match
-        const prevAdvancer = isTeam1Slot ? nextSlot.team1_id : nextSlot.team2_id;
-        const clearResult = prevAdvancer !== winner
-          ? { winner: null, bo3_score: null, team1_diff: 0, team2_diff: 0, replay_1: null, replay_2: null, replay_3: null }
-          : {};
-        await supabase
-          .from("playoff_matches")
-          .update({ ...updateField, ...clearResult })
-          .eq("id", nextSlot.id);
-      } else {
-        // Next round slot doesn't exist yet — create it
-        // Determine round name from the structure based on team count in this season
-        const { data: allMatches } = await supabase
-          .from("playoff_matches")
-          .select("round, slot_index")
-          .eq("season_id", seasonId);
-        const maxSlotInNextRound = (allMatches ?? [])
-          .filter(m => m.round === nextRound)
-          .reduce((max, m) => Math.max(max, m.slot_index), -1);
-        const slotCountGuess = Math.max(maxSlotInNextRound + 1, nextSlotIndex + 1) * 2;
-        const roundNameMap: Record<number, string> = { 2: "Finals", 4: "Semifinals", 8: "Quarterfinals", 16: "Round of 16" };
-
-        await supabase.from("playoff_matches").insert({
-          season_id: seasonId,
-          round: nextRound,
-          round_name: roundNameMap[slotCountGuess] ?? "Next Round",
-          slot_index: nextSlotIndex,
-          team1_id: isTeam1Slot ? winner : null,
-          team2_id: isTeam1Slot ? null : winner,
-        });
-      }
-    }
-  }
-
-  revalidatePath("/schedule");
-  return { ok: true };
-}
-
-// ─── Get all playoff matches for a season ─────────────────────────────────────
-
-export async function getPlayoffMatches(seasonId: string) {
-  if (!hasSupabaseEnv()) return [];
-  const supabase = createSupabaseAdminClient();
-  const { data } = await supabase
-    .from("playoff_matches")
-    .select("*")
-    .eq("season_id", seasonId)
-    .order("round", { ascending: true })
-    .order("slot_index", { ascending: true });
-
-  return (data ?? []).map(row => ({
-    id: row.id,
-    seasonId: row.season_id,
-    round: row.round,
-    roundName: row.round_name,
-    slotIndex: row.slot_index,
-    team1Id: row.team1_id,
-    team2Id: row.team2_id,
-    winner: row.winner,
-    bo3Score: row.bo3_score,
-    team1Diff: row.team1_diff ?? 0,
-    team2Diff: row.team2_diff ?? 0,
-    replay1: row.replay_1,
-    replay2: row.replay_2,
-    replay3: row.replay_3,
-  }));
-}
-
-// ─── Types ──────────────────────────────────────────────────────────────────
+import { hasSupabaseEnv } from "@/lib/supabase/server";
 
 export type PlayoffMatch = {
   id: string;
@@ -189,6 +21,8 @@ export type PlayoffMatch = {
   slotIndex: number;
   team1Id: string | null;
   team2Id: string | null;
+  team1Seed: number | null;
+  team2Seed: number | null;
   winner: string | null;
   bo3Score: string | null;
   team1Diff: number;
@@ -196,4 +30,152 @@ export type PlayoffMatch = {
   replay1: string | null;
   replay2: string | null;
   replay3: string | null;
+  /** First-round bye: team 1 goes straight through */
+  isBye: boolean;
 };
+
+export async function getPlayoffMatches(seasonId: string): Promise<PlayoffMatch[]> {
+  if (!hasSupabaseEnv()) return [];
+  const { data } = await createSupabaseAdminClient()
+    .from("playoff_matches")
+    .select("*")
+    .eq("season_id", seasonId)
+    .order("round", { ascending: true })
+    .order("slot_index", { ascending: true });
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    seasonId: row.season_id,
+    round: row.round,
+    roundName: row.round_name,
+    slotIndex: row.slot_index,
+    team1Id: row.team1_id,
+    team2Id: row.team2_id,
+    team1Seed: row.team1_seed ?? null,
+    team2Seed: row.team2_seed ?? null,
+    winner: row.winner,
+    bo3Score: row.bo3_score,
+    team1Diff: row.team1_diff ?? 0,
+    team2Diff: row.team2_diff ?? 0,
+    replay1: row.replay_1,
+    replay2: row.replay_2,
+    replay3: row.replay_3,
+    isBye: row.bo3_score === BYE_SCORE,
+  }));
+}
+
+type Result = { error?: string; needsConfirm?: boolean };
+
+/**
+ * Build the bracket from the current standings. If any playoff results exist,
+ * returns needsConfirm unless `reset` is true (then those results and their stats are removed).
+ */
+export async function seedPlayoffs(seasonId: string, reset = false): Promise<Result> {
+  const blocked = await denied(requireAdmin);
+  if (blocked) return { error: blocked };
+  if (!hasSupabaseEnv()) return { error: "Supabase isn't configured." };
+  const supabase = createSupabaseAdminClient();
+
+  const { data: existing, error: readErr } = await supabase.from("playoff_matches").select("*").eq("season_id", seasonId);
+  if (readErr) return { error: `Couldn't read the bracket: ${readErr.message}. Run supabase/playoffs.sql first.` };
+  const played = (existing ?? []).filter((m) => m.winner && m.bo3_score !== BYE_SCORE);
+  if (played.length && !reset) return { needsConfirm: true };
+
+  // Standings decide the seeds
+  const [{ data: season }, teams, matches] = await Promise.all([
+    supabase.from("seasons").select("*").eq("id", seasonId).single(),
+    getTeams(seasonId),
+    getSchedule(seasonId),
+  ]);
+  const standings = computeStandings(teams, matches);
+  const size = Math.min(standings.length, Math.max(2, Number(season?.playoff_teams) || standings.length));
+  if (size < 2) return { error: "Playoffs need at least two teams." };
+  const qualifiers = standings.slice(0, size);
+
+  // Out with the old bracket (and any stats its replays added)
+  for (const m of existing ?? []) {
+    for (const url of [m.replay_1, m.replay_2, m.replay_3]) if (url) await undoImport(supabase, url);
+  }
+  if (existing?.length) await supabase.from("playoff_matches").delete().eq("season_id", seasonId);
+
+  const pairs = firstRound(size);
+  const rows = bracketRows(seasonId, size).map((row) => {
+    if (row.round !== 1) return row;
+    const p = pairs[row.slot_index];
+    return {
+      ...row,
+      team1_id: qualifiers[p.seed1 - 1].teamId,
+      team2_id: p.seed2 ? qualifiers[p.seed2 - 1].teamId : null,
+      team1_seed: p.seed1,
+      team2_seed: p.seed2,
+    };
+  });
+  let { error } = await supabase.from("playoff_matches").insert(rows);
+  if (error) {
+    // Database without the seed columns
+    const plain = rows.map(({ team1_seed: _a, team2_seed: _b, ...rest }: Record<string, unknown>) => (void _a, void _b, rest));
+    ({ error } = await supabase.from("playoff_matches").insert(plain));
+  }
+  if (error) return { error: `Couldn't create the bracket: ${error.message}` };
+
+  await syncBracket(supabase, seasonId);
+  revalidatePath("/schedule");
+  return {};
+}
+
+/**
+ * Put a team into a first-round spot. If that team is already in round 1 the two swap places;
+ * otherwise it replaces whoever was there. Only before any playoff game is reported.
+ */
+export async function setFirstRoundTeam(matchId: string, side: 1 | 2, teamId: string): Promise<Result> {
+  const blocked = await denied(requireAdmin);
+  if (blocked) return { error: blocked };
+  if (!hasSupabaseEnv()) return { error: "Supabase isn't configured." };
+  const supabase = createSupabaseAdminClient();
+
+  const { data: target } = await supabase.from("playoff_matches").select("*").eq("id", matchId).single();
+  if (!target || target.round !== 1) return { error: "Only first-round spots can be changed." };
+  const seasonId = target.season_id as string;
+  const { data: all } = await supabase.from("playoff_matches").select("*").eq("season_id", seasonId);
+  if ((all ?? []).some((m) => m.winner && m.bo3_score !== BYE_SCORE)) {
+    return { error: "A playoff game has already been reported. Re-seed the bracket to start over." };
+  }
+
+  const key = side === 1 ? "team1" : "team2";
+  const outgoing = { id: target[`${key}_id`] as string | null, seed: (target[`${key}_seed`] as number | null) ?? null };
+  const round1 = (all ?? []).filter((m) => m.round === 1);
+  const from = round1.flatMap((m) => ([1, 2] as const).filter((s) => m[`team${s}_id`] === teamId).map((s) => ({ m, s })))[0];
+
+  // Seed travels with the team
+  const teams = await getTeams(seasonId);
+  const standings = computeStandings(teams, await getSchedule(seasonId));
+  const seedOf = (id: string) => standings.find((r) => r.teamId === id)?.seed ?? null;
+
+  const set = async (id: string, s: 1 | 2, team: string | null, seed: number | null) => {
+    const patch = { [`team${s}_id`]: team, [`team${s}_seed`]: seed, winner: null, bo3_score: null };
+    const { error } = await supabase.from("playoff_matches").update(patch).eq("id", id);
+    if (error) await supabase.from("playoff_matches").update({ [`team${s}_id`]: team, winner: null, bo3_score: null }).eq("id", id);
+  };
+  await set(matchId, side, teamId, from ? ((from.m[`team${from.s}_seed`] as number | null) ?? seedOf(teamId)) : seedOf(teamId));
+  if (from && !(from.m.id === matchId && from.s === side)) await set(from.m.id, from.s, outgoing.id, outgoing.seed);
+
+  await syncBracket(supabase, seasonId);
+  revalidatePath("/schedule");
+  return {};
+}
+
+/** Remove the bracket entirely (and any stats its replays added). */
+export async function clearPlayoffs(seasonId: string): Promise<Result> {
+  const blocked = await denied(requireAdmin);
+  if (blocked) return { error: blocked };
+  if (!hasSupabaseEnv()) return { error: "Supabase isn't configured." };
+  const supabase = createSupabaseAdminClient();
+  const { data: existing } = await supabase.from("playoff_matches").select("*").eq("season_id", seasonId);
+  for (const m of existing ?? []) {
+    for (const url of [m.replay_1, m.replay_2, m.replay_3]) if (url) await undoImport(supabase, url);
+  }
+  await supabase.from("playoff_matches").delete().eq("season_id", seasonId);
+  revalidatePath("/schedule");
+  revalidatePath("/stats");
+  return {};
+}

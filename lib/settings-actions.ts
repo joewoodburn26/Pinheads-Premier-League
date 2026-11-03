@@ -230,6 +230,16 @@ export async function updateSeasonFormat(seasonId: string, format: string): Prom
   });
 }
 
+/** How many teams make the playoffs; null = everyone. */
+export async function updatePlayoffTeams(seasonId: string, teams: number | null): Promise<Result> {
+  return run(async () => {
+    const value = teams && teams >= 2 ? Math.round(teams) : null;
+    const { error } = await createSupabaseAdminClient().from("seasons").update({ playoff_teams: value }).eq("id", seasonId);
+    if (error) throw new Error(error.message.includes("playoff_teams") ? "Run supabase/playoffs.sql in Supabase first." : error.message);
+    refreshAll();
+  });
+}
+
 /**
  * CSV of "name or dex number, points". With a seasonId the values are saved as
  * that season's points; without one they change the base Pokédex points.

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Pencil, Save, X, Trash2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -150,7 +151,10 @@ export function StatsClient({
   seasonId,
   canEdit = false,
   canResetAll = false,
+  stage = "all",
 }: {
+  /** Which games the numbers cover */
+  stage?: "all" | "regular" | "playoffs";
   stats: StatsRow[];
   seasonId: string;
   /** Signed-in members can fix individual numbers */
@@ -194,8 +198,20 @@ export function StatsClient({
         <div>
           <h1 className="text-3xl font-black">Stats</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Click <Pencil size={12} className="inline" /> to edit any row · Use ⚡ buttons on Schedule to auto-parse replays
+            Filled in when results are reported from replays on the Schedule page
+            {canEdit ? <> · click <Pencil size={12} className="inline" /> to fix a row</> : stage !== "all" ? " · switch to All to edit" : ""}
           </p>
+        </div>
+        <div className="flex gap-1 rounded-lg border p-1">
+          {([["all", "All"], ["regular", "Regular season"], ["playoffs", "Playoffs"]] as const).map(([v, l]) => (
+            <Link
+              key={v}
+              href={v === "all" ? "/stats" : `/stats?stage=${v}`}
+              className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${stage === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+            >
+              {l}
+            </Link>
+          ))}
         </div>
         {canResetAll && <ResetAllButton seasonId={seasonId} />}
       </div>
@@ -203,7 +219,7 @@ export function StatsClient({
       {stats.length === 0 ? (
         <Card className="p-8 text-center space-y-2">
           <p className="text-muted-foreground">No stats yet.</p>
-          <p className="text-sm text-muted-foreground">Go to Schedule and click the ⚡ buttons next to replay links to auto-parse stats.</p>
+          <p className="text-sm text-muted-foreground">Report a result from its replays on the Schedule page to fill these in.</p>
         </Card>
       ) : (
         <div className="space-y-3">

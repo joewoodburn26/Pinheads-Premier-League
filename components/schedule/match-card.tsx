@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ChevronDown, ChevronUp, ClipboardEdit } from "lucide-react";
 import { ReportPanel } from "@/components/schedule/report-panel";
+import type { MatchKind } from "@/lib/match-report";
 import type { ScheduleMatch } from "@/lib/types";
 
 export type TeamVisual = {
@@ -50,19 +51,26 @@ function TeamSide({ team, align, result }: { team: TeamVisual; align: "left" | "
 }
 
 export function MatchCard({
+  kind = "regular",
   match,
   home,
   away,
   canReport,
   highlight,
+  label,
+  defaultOpen = false,
 }: {
+  kind?: MatchKind;
+  /** Small heading above the card, e.g. "Semifinal 1" */
+  label?: string;
+  defaultOpen?: boolean;
   match: ScheduleMatch;
   home: TeamVisual;
   away: TeamVisual;
   canReport: boolean;
   highlight?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const played = !!match.winner;
   const homeWon = match.winner === match.homeTeam;
   const score = /^(\d)\s*-\s*(\d)$/.exec(match.bo3Score ?? "");
@@ -77,8 +85,10 @@ export function MatchCard({
       className={`overflow-hidden rounded-xl border bg-card transition-shadow ${open ? "xl:col-span-2" : ""} ${highlight ? "ring-2 ring-primary/60" : ""}`}
       style={{ borderColor: played ? `${(homeWon ? home : away).color}66` : undefined }}
     >
-      {highlight && (
-        <div className="bg-primary/15 px-4 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">Your match</div>
+      {(highlight || label) && (
+        <div className={`px-4 py-1 text-[11px] font-bold uppercase tracking-wider ${highlight ? "bg-primary/15 text-primary" : "bg-white/[0.03] text-muted-foreground"}`}>
+          {[label, highlight ? "Your match" : ""].filter(Boolean).join(" · ")}
+        </div>
       )}
       <div className="grid grid-cols-[1fr_auto_1fr] items-stretch">
         <TeamSide team={home} align="left" result={played ? (homeWon ? "win" : "loss") : "none"} />
@@ -148,6 +158,7 @@ export function MatchCard({
 
       {open && canReport && (
         <ReportPanel
+          kind={kind}
           match={match}
           home={{ name: home.name, color: home.color }}
           away={{ name: away.name, color: away.color }}

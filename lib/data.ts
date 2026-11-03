@@ -21,6 +21,7 @@ async function loadSeasons(): Promise<Season[]> {
     draftBudget:  row.draft_budget,
     rosterSize:   row.roster_size ?? undefined,
     format:       row.format ?? undefined,
+    playoffTeams: row.playoff_teams ?? undefined,
     activeSeason: row.active_season,
     archived:     row.archived,
     createdAt:    row.created_at,

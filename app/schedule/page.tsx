@@ -52,7 +52,10 @@ export default async function SchedulePage({
       seasonId={season.id}
       visuals={visuals}
       myTeamId={myTeam?.id}
-      subtitle={`${season.name} · ${formatLabel(season.format)} · Bo3 · all teams make the playoffs`}
+      subtitle={`${season.name} · ${formatLabel(season.format)} · Bo3 · ${
+        season.playoffTeams && season.playoffTeams < teams.length ? `top ${season.playoffTeams} make the playoffs` : "all teams make the playoffs"
+      }`}
+      playoffTeams={season.playoffTeams}
       canReport={canReport(user)}
       canSetupBracket={canReport(user) && isAdmin(user)}
     />

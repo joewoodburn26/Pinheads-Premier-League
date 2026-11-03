@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import {
   createNewSeason, setActiveSeason, archiveSeason,
   deleteSeason, applyTeamChanges, regenerateSchedule,
-  updateRosterSize, updateSeasonFormat,
+  updateRosterSize, updateSeasonFormat, updatePlayoffTeams,
 } from "@/lib/settings-actions";
 import type { Season, Team } from "@/lib/types";
 
@@ -76,8 +76,25 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 
 // ─── Season settings editor (roster size + format) ────────────────────────────
 
-function SeasonSettingsEditor({ season }: { season: Season }) {
+function SeasonSettingsEditor({ season, teamCount }: { season: Season; teamCount: number }) {
   const [isPending, startTransition] = useTransition();
+
+  // Playoffs
+  const [playoffTeams, setPlayoffTeams] = useState(season.playoffTeams ? String(season.playoffTeams) : "all");
+  const [playoffSaved, setPlayoffSaved] = useState(false);
+  function handleSavePlayoffs() {
+    setSaveError("");
+    startTransition(async () => {
+      try {
+        const r = await updatePlayoffTeams(season.id, playoffTeams === "all" ? null : Number(playoffTeams));
+        if (r.error) return setSaveError(r.error);
+        setPlayoffSaved(true);
+        setTimeout(() => setPlayoffSaved(false), 2000);
+      } catch {
+        setSaveError("Couldn't save the playoff size. Try again.");
+      }
+    });
+  }
 
   // Roster size
   const [size,    setSize]    = useState(season.rosterSize ?? 10);
@@ -183,6 +200,41 @@ function SeasonSettingsEditor({ season }: { season: Season }) {
           )}
           {formatSaved && <p className="text-xs text-green-400">✓ Format updated</p>}
           {saveError && <p className="text-xs text-red-400">✗ {saveError}</p>}
+        </div>
+      </div>
+
+      {/* Playoffs */}
+      <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+        <div>
+          <p className="text-sm font-semibold">Playoff Teams</p>
+          <p className="text-xs text-muted-foreground">
+            How many teams make the playoffs. If it isn&apos;t 2, 4, 8 or 16, the top seeds get a first-round bye.
+            Re-seed the bracket on the Schedule page after changing this.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <select
+            value={playoffTeams}
+            onChange={e => setPlayoffTeams(e.target.value)}
+            className="rounded-md border bg-background px-3 py-2 text-sm flex-1 min-w-0"
+          >
+            <option value="all">All teams ({teamCount})</option>
+            {Array.from({ length: Math.max(0, teamCount - 2) }, (_, i) => i + 2).map(n => {
+              let size = 1;
+              while (size < n) size *= 2;
+              return (
+                <option key={n} value={String(n)}>
+                  Top {n}{size !== n ? ` (${size - n} bye${size - n === 1 ? "" : "s"})` : ""}
+                </option>
+              );
+            })}
+          </select>
+          {playoffTeams !== (season.playoffTeams ? String(season.playoffTeams) : "all") && (
+            <Button onClick={handleSavePlayoffs} disabled={isPending}>
+              {isPending ? "Saving…" : "Save Playoff Teams"}
+            </Button>
+          )}
+          {playoffSaved && <p className="text-xs text-green-400">✓ Playoff size updated</p>}
         </div>
       </div>
     </div>
@@ -505,7 +557,7 @@ export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; 
           </div>
 
           {/* Season settings (roster size + format) */}
-          <SeasonSettingsEditor season={activeSeason} />
+          <SeasonSettingsEditor season={activeSeason} teamCount={teams.filter(t => t.seasonId === activeSeason.id).length} />
 
           {/* Add team */}
           <div className="flex gap-3">
