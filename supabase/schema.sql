@@ -104,8 +104,11 @@ create table if not exists replay_imports (
   parsed_payload jsonb,
   error_message text,
   created_at timestamptz not null default now(),
-  processed_at timestamptz
+  processed_at timestamptz,
+  parsed_at timestamptz
 );
+create index if not exists replay_imports_url_idx on replay_imports(replay_url);
+alter table replay_imports enable row level security;
 
 create index if not exists teams_season_idx on teams(season_id);
 create index if not exists team_pokemon_team_idx on team_pokemon(team_id);

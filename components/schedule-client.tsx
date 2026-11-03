@@ -1,441 +1,226 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { ExternalLink, Save, Trophy, Swords } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useMemo, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { CalendarDays, Moon, Swords, Trophy } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { updateMatch } from "@/lib/actions";
 import { PlayoffBracketBuilder } from "@/components/playoff-bracket-builder";
-import { ParseReplayButton } from "@/components/parse-replay-button";
-import type { ScheduleMatch, Team } from "@/lib/types";
+import { MatchCard, type TeamVisual } from "@/components/schedule/match-card";
+import { computeStandings, type StandingRow } from "@/components/schedule/standings";
 import type { PlayoffMatch } from "@/lib/playoff-actions";
-import { winPct } from "@/lib/utils";
+import type { ScheduleMatch, Team } from "@/lib/types";
 
 const BYE_ID = "BYE";
 
-// ─── Standing row ─────────────────────────────────────────────────────────────
+// ─── Standings ────────────────────────────────────────────────────────────────
 
-interface StandingRow {
-  teamId: string;
-  teamName: string;
-  coachName: string;
-  wins: number;
-  losses: number;
-  battleDiff: number;
-  seed: number;
-}
-
-// ─── Standings table ──────────────────────────────────────────────────────────
-
-function StandingsTable({ standings }: { standings: StandingRow[] }) {
+function StandingsTable({ standings, visuals }: { standings: StandingRow[]; visuals: Record<string, TeamVisual> }) {
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-black">Standings</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Sorted by: Match Record → Battle Differential → Win %
-        </p>
-      </div>
-      <div className="overflow-hidden rounded-lg border">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-muted text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            <tr>
-              <th className="p-3">#</th>
-              <th className="p-3">Team</th>
-              <th className="p-3">Coach</th>
-              <th className="p-3 text-center">W</th>
-              <th className="p-3 text-center">L</th>
-              <th className="p-3 text-center">Win %</th>
-              <th className="p-3 text-center">Battle Diff</th>
-              <th className="p-3 text-center">Playoffs</th>
-            </tr>
-          </thead>
-          <tbody>
-            {standings.map((row) => {
-              const diffColor = row.battleDiff > 0 ? "text-green-400" : row.battleDiff < 0 ? "text-red-400" : "text-muted-foreground";
-              return (
-                <tr key={row.teamId} className="border-t">
-                  <td className="p-3 font-black text-muted-foreground">{row.seed}</td>
-                  <td className="p-3 font-bold">{row.teamName}</td>
-                  <td className="p-3 text-muted-foreground">{row.coachName}</td>
-                  <td className="p-3 text-center font-bold">{row.wins}</td>
-                  <td className="p-3 text-center text-muted-foreground">{row.losses}</td>
-                  <td className="p-3 text-center">{winPct(row.wins, row.losses)}</td>
-                  <td className={`p-3 text-center font-bold ${diffColor}`}>
-                    {row.battleDiff > 0 ? `+${row.battleDiff}` : row.battleDiff}
-                  </td>
-                  <td className="p-3 text-center">
-                    <span className="rounded-full bg-primary/20 border border-primary/40 px-2 py-0.5 text-xs font-bold text-primary">
-                      Seed #{row.seed}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <Card className="p-4 text-xs text-muted-foreground space-y-1">
-        <p className="font-semibold text-foreground text-sm">Tie-Breaker Order</p>
-        <p><span className="font-semibold text-foreground">1st:</span> Match Win/Loss Record</p>
-        <p><span className="font-semibold text-foreground">2nd:</span> Cumulative Battle Differential</p>
-        <p><span className="font-semibold text-foreground">3rd:</span> Head-to-Head Record</p>
-        <p><span className="font-semibold text-foreground">4th:</span> Cumulative Game Win %</p>
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-muted/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="p-3">#</th>
+                <th className="p-3">Team</th>
+                <th className="p-3 text-center">Record</th>
+                <th className="p-3 text-center">Diff</th>
+                <th className="p-3 text-center">Games</th>
+                <th className="p-3 text-center">Form</th>
+              </tr>
+            </thead>
+            <tbody>
+              {standings.map((row) => {
+                const v = visuals[row.teamId];
+                const diffColor = row.battleDiff > 0 ? "text-green-400" : row.battleDiff < 0 ? "text-red-400" : "text-muted-foreground";
+                return (
+                  <tr key={row.teamId} className="border-t border-white/5">
+                    <td className="p-3 font-black text-muted-foreground">{row.seed}</td>
+                    <td className="p-3">
+                      <Link href={`/teams/${row.teamId}`} className="flex items-center gap-2.5 hover:underline">
+                        <span className="h-8 w-1 rounded-full" style={{ background: v?.color }} />
+                        {v?.aceSprite ? (
+                          <Image src={v.aceSprite} alt="" width={32} height={32} className="size-8 object-contain" />
+                        ) : null}
+                        <span className="min-w-0">
+                          <span className="block truncate font-bold">{row.teamName}</span>
+                          <span className="block truncate text-xs text-muted-foreground">{row.coachName}</span>
+                        </span>
+                      </Link>
+                    </td>
+                    <td className="p-3 text-center font-bold tabular-nums">{row.wins}–{row.losses}</td>
+                    <td className={`p-3 text-center font-bold tabular-nums ${diffColor}`}>{row.battleDiff > 0 ? `+${row.battleDiff}` : row.battleDiff}</td>
+                    <td className="p-3 text-center tabular-nums text-muted-foreground">{row.gameWins}–{row.gameLosses}</td>
+                    <td className="p-3">
+                      <div className="flex justify-center gap-1">
+                        {row.form.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
+                        {row.form.map((r, i) => (
+                          <span
+                            key={i}
+                            className={`grid size-5 place-items-center rounded text-[10px] font-black ${r === "W" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}
+                          >
+                            {r}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </Card>
-    </div>
-  );
-}
-
-// ─── BYE week display ─────────────────────────────────────────────────────────
-
-function ByeWeekBanner({ byeTeamName }: { byeTeamName: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-4 py-3 flex items-center gap-3">
-      <span className="text-2xl">😴</span>
-      <div>
-        <p className="text-sm font-bold">{byeTeamName} — BYE Week</p>
-        <p className="text-xs text-muted-foreground">No match this week</p>
-      </div>
-    </div>
-  );
-}
-
-// ─── Match card ───────────────────────────────────────────────────────────────
-
-function SignInToReport() {
-  return (
-    <a href="/login?next=/schedule" className="text-xs text-muted-foreground underline hover:text-foreground">
-      Sign in to report results
-    </a>
-  );
-}
-
-function ReadOnlyMatch({ match, homeName, awayName }: { match: ScheduleMatch; homeName: string; awayName: string }) {
-  const replays = [match.replay1, match.replay2, match.replay3].filter((r): r is string => Boolean(r));
-  const fmt = (n: number | undefined) => (n && n > 0 ? `+${n}` : String(n ?? 0));
-  return (
-    <Card className={`p-4 space-y-3 ${match.winner ? "border-primary/20" : ""}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="font-bold text-base">
-          {homeName}
-          <span className="text-muted-foreground font-normal mx-2">vs</span>
-          {awayName}
-        </span>
-        {match.winner ? (
-          <span className="text-xs font-bold rounded-full bg-primary/10 border border-primary/30 px-2 py-0.5 text-primary shrink-0">
-            {match.winner === match.homeTeam ? homeName : awayName} won {match.bo3Score}
-          </span>
-        ) : (
-          <span className="text-xs text-muted-foreground">Not played yet</span>
-        )}
-      </div>
-      {match.winner && (
-        <p className="text-xs text-muted-foreground">
-          Battle diff: {homeName} {fmt(match.homeDiff)} · {awayName} {fmt(match.awayDiff)}
-        </p>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
-        {replays.map((r, i) => (
-          <a key={r} href={r} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1 rounded-md border bg-muted px-2 py-1 text-xs hover:bg-muted/80">
-            <ExternalLink size={12} /> Game {i + 1}
-          </a>
-        ))}
-        <span className="ml-auto"><SignInToReport /></span>
-      </div>
-    </Card>
-  );
-}
-
-function MatchCard({ match, teamName, seasonId, parsedReplays, canReport }: {
-  match: ScheduleMatch;
-  teamName: (id: string) => string;
-  seasonId: string;
-  parsedReplays: string[];
-  canReport: boolean;
-}) {
-  const [isPending, startTransition] = useTransition();
-  const [winner,   setWinner]   = useState(match.winner ?? "");
-  const [bo3Score, setBo3Score] = useState(match.bo3Score ?? "");
-  const [homeDiff, setHomeDiff] = useState(String(match.homeDiff ?? 0));
-  const [awayDiff, setAwayDiff] = useState(String(match.awayDiff ?? 0));
-  const [replay1,  setReplay1]  = useState(match.replay1 ?? "");
-  const [replay2,  setReplay2]  = useState(match.replay2 ?? "");
-  const [replay3,  setReplay3]  = useState(match.replay3 ?? "");
-  const [saved,    setSaved]    = useState(false);
-  const [error,    setError]    = useState("");
-
-  const homeName = teamName(match.homeTeam);
-  const awayName = match.awayTeam === BYE_ID ? "BYE" : teamName(match.awayTeam);
-
-  function handleSave() {
-    const fd = new FormData();
-    fd.set("id",       match.id);
-    fd.set("winner",   winner);
-    fd.set("bo3Score", bo3Score);
-    fd.set("homeDiff", homeDiff);
-    fd.set("awayDiff", awayDiff);
-    fd.set("replay1",  replay1);
-    fd.set("replay2",  replay2);
-    fd.set("replay3",  replay3);
-    setError("");
-    startTransition(async () => {
-      try {
-        await updateMatch(fd);
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
-      } catch {
-        setError("Couldn't save the result. Make sure you're signed in and try again.");
-      }
-    });
-  }
-
-  function handleHomeDiffChange(val: string) {
-    setHomeDiff(val);
-    const num = parseInt(val);
-    if (!isNaN(num)) setAwayDiff(String(-num));
-  }
-
-  if (!canReport) return <ReadOnlyMatch match={match} homeName={homeName} awayName={awayName} />;
-
-  return (
-    <Card className={`p-4 space-y-4 ${match.winner ? "border-primary/20" : ""}`}>
-      <div className="flex items-center justify-between gap-4">
-        <span className="font-bold text-base">
-          {homeName}
-          <span className="text-muted-foreground font-normal mx-2">vs</span>
-          {awayName}
-        </span>
-        {match.winner && (
-          <span className="text-xs font-bold rounded-full bg-primary/10 border border-primary/30 px-2 py-0.5 text-primary shrink-0">
-            {match.winner === match.homeTeam ? homeName : awayName} won {bo3Score}
-          </span>
-        )}
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Series Winner</label>
-          <select value={winner} onChange={e => setWinner(e.target.value)}
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm">
-            <option value="">— No result —</option>
-            <option value={match.homeTeam}>{homeName}</option>
-            {match.awayTeam !== BYE_ID && <option value={match.awayTeam}>{awayName}</option>}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Bo3 Score</label>
-          <select value={bo3Score} onChange={e => setBo3Score(e.target.value)}
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm">
-            <option value="">— Select —</option>
-            <option value="2-0">2-0</option>
-            <option value="2-1">2-1</option>
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{homeName} Diff</label>
-          <Input type="number" value={homeDiff} onChange={e => handleHomeDiffChange(e.target.value)}
-            className={parseInt(homeDiff) > 0 ? "text-green-400 font-bold" : parseInt(homeDiff) < 0 ? "text-red-400 font-bold" : ""} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{awayName} Diff</label>
-          <Input type="number" value={awayDiff}
-            onChange={e => { setAwayDiff(e.target.value); const n = parseInt(e.target.value); if (!isNaN(n)) setHomeDiff(String(-n)); }}
-            className={parseInt(awayDiff) > 0 ? "text-green-400 font-bold" : parseInt(awayDiff) < 0 ? "text-red-400 font-bold" : ""} />
-        </div>
-      </div>
-
       <p className="text-xs text-muted-foreground">
-        💡 Battle Diff = Pokémon alive delta per game, summed across the series. Auto-mirrors.
+        Tie-breakers, in order: match record → battle differential → head-to-head between the tied teams → game win %.
+        Form shows the last 5 results, newest first.
       </p>
-
-      <div className="grid gap-2 sm:grid-cols-3">
-        {[
-          { label: "Game 1 Replay", value: replay1, set: setReplay1, gameLabel: "Game 1" },
-          { label: "Game 2 Replay", value: replay2, set: setReplay2, gameLabel: "Game 2" },
-          { label: `Game 3 Replay`, value: replay3, set: setReplay3, optional: bo3Score !== "2-1", gameLabel: "Game 3" },
-        ].map(({ label, value, set, optional, gameLabel }) => (
-          <div key={label} className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              {label} {optional && <span className="opacity-50">(if played)</span>}
-            </label>
-            <div className="flex gap-1">
-              <Input value={value} onChange={e => set(e.target.value)}
-                placeholder="replay.pokemonshowdown.com/…" className="text-xs" />
-              {value && (
-                <a href={value} target="_blank" rel="noopener noreferrer"
-                  className="shrink-0 rounded-md border bg-muted px-2 flex items-center hover:bg-muted/80">
-                  <ExternalLink size={14} />
-                </a>
-              )}
-            </div>
-            {value && (
-              <ParseReplayButton
-                replayUrl={value}
-                replayLabel={gameLabel}
-                seasonId={seasonId}
-                homeTeamId={match.homeTeam}
-                awayTeamId={match.awayTeam}
-                isParsed={parsedReplays.includes(value)}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-
-      <div className="flex items-center gap-3">
-        <Button onClick={handleSave} disabled={isPending}>
-          <Save size={14} className="mr-2" />
-          {isPending ? "Saving…" : "Save Result"}
-        </Button>
-        {saved && <span className="text-xs text-green-400 font-semibold">✓ Saved</span>}
-        {error && <span className="text-xs text-red-400">{error}</span>}
-      </div>
-    </Card>
-  );
-}
-
-// ─── Week tab ─────────────────────────────────────────────────────────────────
-
-function WeekTab({ week, matches, teamName, standings, seasonId, parsedReplays, canReport }: {
-  canReport: boolean;
-  week: number;
-  matches: ScheduleMatch[];
-  teamName: (id: string) => string;
-  standings: StandingRow[];
-  seasonId: string;
-  parsedReplays: string[];
-}) {
-  const weekMatches  = matches.filter(m => m.week === week);
-  const realMatches  = weekMatches.filter(m => !m.isBye);
-  const byeMatches   = weekMatches.filter(m => m.isBye);
-  const completed    = realMatches.filter(m => m.winner).length;
-
-  return (
-    <div className="space-y-8">
-      <div className="flex items-center gap-4">
-        <div className="rounded-lg border bg-muted/40 px-4 py-2 text-sm">
-          <span className="text-muted-foreground">Completed: </span>
-          <span className="font-bold">{completed}/{realMatches.length}</span>
-        </div>
-        {completed === realMatches.length && realMatches.length > 0 && (
-          <span className="text-xs font-bold text-green-400 rounded-full border border-green-500/40 bg-green-500/10 px-3 py-1">
-            ✓ Week Complete
-          </span>
-        )}
-      </div>
-
-      {/* BYE weeks */}
-      {byeMatches.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Bye This Week</h3>
-          {byeMatches.map(m => (
-            <ByeWeekBanner key={m.id} byeTeamName={teamName(m.homeTeam)} />
-          ))}
-        </div>
-      )}
-
-      {/* Matches */}
-      <div className="space-y-4">
-        <h2 className="text-xl font-black">Week {week} Matches</h2>
-        {realMatches.map(match => (
-          <MatchCard key={match.id} match={match} teamName={teamName} seasonId={seasonId} parsedReplays={parsedReplays} canReport={canReport} />
-        ))}
-      </div>
-
-      <StandingsTable standings={standings} />
     </div>
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Week strip ───────────────────────────────────────────────────────────────
+
+function WeekStrip({ weeks, active, onPick, matches }: {
+  weeks: number[]; active: number; onPick: (w: number) => void; matches: ScheduleMatch[];
+}) {
+  return (
+    <div className="flex gap-1.5 overflow-x-auto pb-1">
+      {weeks.map((w) => {
+        const wm = matches.filter((m) => m.week === w && !m.isBye);
+        const on = w === active;
+        return (
+          <button
+            key={w}
+            onClick={() => onPick(w)}
+            className={`flex min-w-[64px] shrink-0 flex-col items-center gap-1 rounded-lg border px-3 py-2 transition-colors ${on ? "border-primary bg-primary/15" : "hover:bg-muted"}`}
+          >
+            <span className={`text-xs font-bold ${on ? "text-primary" : "text-muted-foreground"}`}>Week</span>
+            <span className="text-lg font-black leading-none">{w}</span>
+            <span className="flex gap-0.5">
+              {wm.map((m) => (
+                <span key={m.id} className={`size-1.5 rounded-full ${m.winner ? "bg-green-400" : "bg-white/20"}`} />
+              ))}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function ScheduleClient({
-  matches, teams, initialWeek, playoffMatches, seasonId, parsedReplays,
+  matches, teams, initialWeek, playoffMatches, seasonId, visuals, myTeamId, subtitle,
   canReport = false, canSetupBracket = false,
 }: {
   matches: ScheduleMatch[];
   teams: Team[];
-  initialWeek: number;
+  /** Week from the URL, if any */
+  initialWeek?: number;
   playoffMatches: PlayoffMatch[];
   seasonId: string;
-  parsedReplays: string[];
-  /** Signed-in members can enter results, replays and parse stats */
+  visuals: Record<string, TeamVisual>;
+  myTeamId?: string;
+  subtitle: string;
+  /** Signed-in members can report results */
   canReport?: boolean;
   /** Admins and the owner can arrange the playoff bracket */
   canSetupBracket?: boolean;
 }) {
-  const realMatches = matches.filter(m => !m.isBye);
-  const weeks = [...new Set(matches.map(m => m.week))].sort((a, b) => a - b);
-  const [activeTab, setActiveTab] = useState<number | "standings" | "playoffs">(
-    initialWeek > 0 ? initialWeek : "standings"
+  const weeks = useMemo(() => [...new Set(matches.map((m) => m.week))].sort((a, b) => a - b), [matches]);
+  // Open on the first week that still has matches to play
+  const currentWeek =
+    weeks.find((w) => matches.some((m) => m.week === w && !m.isBye && !m.winner)) ?? weeks[weeks.length - 1] ?? 1;
+  const [tab, setTab] = useState<"matches" | "standings" | "playoffs">("matches");
+  const [week, setWeek] = useState(initialWeek && weeks.includes(initialWeek) ? initialWeek : currentWeek);
+
+  const standings = useMemo(() => computeStandings(teams, matches), [teams, matches]);
+  const teamNameMap = Object.fromEntries(teams.map((t) => [t.id, t.teamName]));
+  const visual = (id: string): TeamVisual =>
+    visuals[id] ?? { id, name: id === BYE_ID ? "BYE" : "TBD", coach: "", logoUrl: null, aceSprite: null, color: "#64748b", color2: "#64748b" };
+
+  const weekMatches = matches.filter((m) => m.week === week);
+  const games = weekMatches
+    .filter((m) => !m.isBye && m.awayTeam !== BYE_ID)
+    .sort((a, b) => Number(b.homeTeam === myTeamId || b.awayTeam === myTeamId) - Number(a.homeTeam === myTeamId || a.awayTeam === myTeamId));
+  const byes = weekMatches.filter((m) => m.isBye || m.awayTeam === BYE_ID);
+  const done = games.filter((m) => m.winner).length;
+
+  const tabBtn = (id: typeof tab, label: string, Icon: typeof Trophy) => (
+    <button
+      onClick={() => setTab(id)}
+      className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${tab === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+    >
+      <Icon size={14} /> {label}
+    </button>
   );
-
-  const teamName = (id: string) => {
-    if (id === BYE_ID) return "BYE";
-    return teams.find(t => t.id === id)?.teamName ?? "TBD";
-  };
-
-  const teamNameMap: Record<string, string> = {};
-  teams.forEach(t => { teamNameMap[t.id] = t.teamName; });
-
-  // Calculate standings from match data
-  const standings: StandingRow[] = teams.map(team => {
-    const teamMatches = realMatches.filter(m => m.homeTeam === team.id || m.awayTeam === team.id);
-    const wins        = teamMatches.filter(m => m.winner === team.id).length;
-    const losses      = teamMatches.filter(m => m.winner && m.winner !== team.id).length;
-    const diff        = teamMatches.reduce((sum, m) => {
-      if (m.homeTeam === team.id) return sum + (m.homeDiff ?? 0);
-      if (m.awayTeam === team.id) return sum + (m.awayDiff ?? 0);
-      return sum;
-    }, 0);
-    return { teamId: team.id, teamName: team.teamName, coachName: team.coach?.name ?? "—", wins, losses, battleDiff: diff, seed: 0 };
-  }).sort((a, b) => {
-    if (b.wins !== a.wins) return b.wins - a.wins;
-    if (b.battleDiff !== a.battleDiff) return b.battleDiff - a.battleDiff;
-    return parseFloat(winPct(b.wins, b.losses)) - parseFloat(winPct(a.wins, a.losses));
-  }).map((row, idx) => ({ ...row, seed: idx + 1 }));
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-black">Schedule & Standings</h1>
-        <p className="text-muted-foreground mt-1">
-          National Dex Bo3 · Battle Differential tie-breaker · All teams qualify for playoffs
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-black sm:text-4xl">Schedule</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+        </div>
+        <div className="flex gap-1 rounded-lg border p-1">
+          {tabBtn("matches", "Matches", CalendarDays)}
+          {tabBtn("standings", "Standings", Trophy)}
+          {tabBtn("playoffs", "Playoffs", Swords)}
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-2 border-b pb-2">
-        <button onClick={() => setActiveTab("standings")}
-          className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors flex items-center gap-1.5 ${activeTab === "standings" ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}>
-          <Trophy size={14} /> Standings
-        </button>
+      {tab === "matches" && (
+        <div className="space-y-5">
+          <WeekStrip weeks={weeks} active={week} onPick={setWeek} matches={matches} />
 
-        {weeks.map(week => {
-          const wm = matches.filter(m => m.week === week && !m.isBye);
-          const allDone = wm.length > 0 && wm.every(m => m.winner);
-          const hasBye  = matches.some(m => m.week === week && m.isBye);
-          return (
-            <button key={week} onClick={() => setActiveTab(week)}
-              className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${activeTab === week ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}>
-              Week {week}
-              {hasBye && <span className="ml-1 text-yellow-400" title="Bye week">😴</span>}
-              {allDone && <span className="ml-1 text-green-400">✓</span>}
-            </button>
-          );
-        })}
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-2xl font-black">Week {week}</h2>
+            <span className="rounded-full border px-3 py-0.5 text-xs text-muted-foreground">
+              {done}/{games.length} played
+            </span>
+            {games.length > 0 && done === games.length && (
+              <span className="rounded-full border border-green-500/40 bg-green-500/10 px-3 py-0.5 text-xs font-bold text-green-400">Week complete</span>
+            )}
+          </div>
 
-        <button onClick={() => setActiveTab("playoffs")}
-          className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors flex items-center gap-1.5 ${activeTab === "playoffs" ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}>
-          <Swords size={14} /> Playoffs
-        </button>
-      </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            {games.map((m) => (
+              <MatchCard
+                key={m.id}
+                match={m}
+                home={visual(m.homeTeam)}
+                away={visual(m.awayTeam)}
+                canReport={canReport}
+                highlight={!!myTeamId && (m.homeTeam === myTeamId || m.awayTeam === myTeamId)}
+              />
+            ))}
+          </div>
+          {games.length === 0 && <p className="text-sm text-muted-foreground">No matches this week.</p>}
 
-      {/* Content */}
-      {activeTab === "standings" && <StandingsTable standings={standings} />}
-      {activeTab === "playoffs" && (
+          {byes.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <Moon size={14} /> Bye:
+              {byes.map((m) => (
+                <span key={m.id} className="rounded-full border px-2.5 py-0.5 text-xs font-semibold text-foreground">{visual(m.homeTeam).name}</span>
+              ))}
+            </div>
+          )}
+
+          {!canReport && (
+            <p className="text-xs text-muted-foreground">
+              <Link href="/login?next=/schedule" className="underline hover:text-foreground">Sign in</Link> to report results.
+            </p>
+          )}
+        </div>
+      )}
+
+      {tab === "standings" && <StandingsTable standings={standings} visuals={visuals} />}
+
+      {tab === "playoffs" && (
         <PlayoffBracketBuilder
           standings={standings}
           playoffMatches={playoffMatches}
@@ -444,9 +229,6 @@ export function ScheduleClient({
           canSetup={canSetupBracket}
           canReport={canReport}
         />
-      )}
-      {typeof activeTab === "number" && (
-        <WeekTab week={activeTab} matches={matches} teamName={teamName} standings={standings} seasonId={seasonId} parsedReplays={parsedReplays} canReport={canReport} />
       )}
     </div>
   );
