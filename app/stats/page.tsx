@@ -2,6 +2,8 @@ import { getActiveSeason, getTeams, getStats, getRoster } from "@/lib/data";
 import { StatsClient } from "@/components/stats-client";
 import { canReport, getCurrentUser, isOwner } from "@/lib/auth";
 import { getPlayoffTotals } from "@/lib/playoff-stats";
+import { getDominantTypeColor } from "@/lib/team-theme";
+import type { Pokemon } from "@/lib/types";
 
 export const revalidate = 0;
 
@@ -80,8 +82,18 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
     });
   }
 
+  // Each team's color (from its Pokémon's types), for the team dots
+  const teamOptions = teams
+    .map((t, i) => ({
+      id: t.id,
+      name: t.teamName,
+      color: getDominantTypeColor(allRosters[i].map((s) => s.pokemon).filter((p): p is Pokemon => !!p)).color,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <StatsClient
+      teams={teamOptions}
       stats={stats}
       seasonId={season.id}
       canEdit={canReport(user) && stage === "all"}
