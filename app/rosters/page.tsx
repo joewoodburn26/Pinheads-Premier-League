@@ -1,4 +1,4 @@
-import { getTeams, getRoster, getActiveSeason, getPokemon } from "@/lib/data";
+import { getTeams, getSeasonRosters, getActiveSeason, getPokemon } from "@/lib/data";
 import { RostersClient } from "@/components/rosters-client";
 import { RosterTeamFilter } from "@/components/roster-team-filter";
 import { canEditTeam, getCurrentUser, isAdmin } from "@/lib/auth";
@@ -12,11 +12,17 @@ export default async function RostersPage({
   searchParams: Promise<{ teams?: string }>;
 }) {
   const season = await getActiveSeason();
-  const [allTeams, allPokemon, user] = await Promise.all([
+  const [teamsByWins, allPokemon, user] = await Promise.all([
     getTeams(season.id),
     getPokemon(),
     getCurrentUser(),
   ]);
+  // Saved draft order (set by dragging the cards), then name for any team without one
+  const allTeams = [...teamsByWins].sort(
+    (a, b) =>
+      (a.draftOrder ?? Number.MAX_SAFE_INTEGER) - (b.draftOrder ?? Number.MAX_SAFE_INTEGER) ||
+      a.teamName.localeCompare(b.teamName),
+  );
   const editableTeamIds = allTeams.filter((t) => canEditTeam(user, t.coachId)).map((t) => t.id);
   const canReorderTeams = isAdmin(user) && !user?.mustChangePassword;
 
@@ -28,9 +34,8 @@ export default async function RostersPage({
       ? allTeams.filter((t) => selectedIds.includes(t.id))
       : allTeams;
 
-  const rostersRaw = await Promise.all(
-    visibleTeams.map((team) => getRoster(team.id))
-  );
+  const rosterMap = await getSeasonRosters(season.id);
+  const rostersRaw = visibleTeams.map((team) => rosterMap.get(team.id) ?? []);
 
   const rosters = visibleTeams.map((team, i) => ({
     team,

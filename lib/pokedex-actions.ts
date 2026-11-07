@@ -2,7 +2,8 @@
 
 import { canAdmin } from "@/lib/auth";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { POKEDEX_TAG } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -13,6 +14,7 @@ export async function toggleBan(pokemonId: string, banned: boolean): Promise<{ o
     .from("pokemon")
     .update({ banned })
     .eq("id", pokemonId);
+  revalidateTag(POKEDEX_TAG);
   revalidatePath("/settings/pokedex");
   revalidatePath("/draft");
   revalidatePath("/rosters");
@@ -26,6 +28,7 @@ export async function updatePointValue(pokemonId: string, pointValue: number): P
     .from("pokemon")
     .update({ point_value: pointValue })
     .eq("id", pokemonId);
+  revalidateTag(POKEDEX_TAG);
   revalidatePath("/settings/pokedex");
   revalidatePath("/draft");
   return { ok: true };

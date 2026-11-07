@@ -1,4 +1,4 @@
-import { getActiveSeason, getRoster, getSchedule, getTeams } from "@/lib/data";
+import { getActiveSeason, getSchedule, getSeasonRosters, getTeams } from "@/lib/data";
 import { getPlayoffMatches } from "@/lib/playoff-actions";
 import { ScheduleClient } from "@/components/schedule-client";
 import type { TeamVisual } from "@/components/schedule/match-card";
@@ -22,7 +22,8 @@ export default async function SchedulePage({
     getPlayoffMatches(season.id),
     getCurrentUser(),
   ]);
-  const rosters = await Promise.all(teams.map((t) => getRoster(t.id)));
+  const rosterMap = await getSeasonRosters(season.id);
+  const rosters = teams.map((t) => rosterMap.get(t.id) ?? []);
 
   // Team colors (from their Pokémon's types), logo and ace for the match cards
   const visuals: Record<string, TeamVisual> = {};

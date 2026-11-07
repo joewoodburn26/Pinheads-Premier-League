@@ -3,7 +3,8 @@
 // Season & team management. These return { error } instead of throwing so the
 // settings page can show the real reason (production hides thrown messages).
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { POKEDEX_TAG } from "@/lib/data";
 import { requireAdmin } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -21,6 +22,7 @@ async function run(fn: () => Promise<void>): Promise<Result> {
 }
 
 function refreshAll() {
+  revalidateTag(POKEDEX_TAG); // points may have changed
   revalidatePath("/", "layout");
 }
 

@@ -1,4 +1,4 @@
-import { getActiveSeason, getTeams, getStats, getRoster } from "@/lib/data";
+import { getActiveSeason, getTeams, getStats, getSeasonRosters } from "@/lib/data";
 import { StatsClient } from "@/components/stats-client";
 import { canReport, getCurrentUser, isOwner } from "@/lib/auth";
 import { getPlayoffTotals } from "@/lib/playoff-stats";
@@ -27,7 +27,8 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
   }
 
   // Fetch all rosters and build a complete stats list
-  const allRosters = await Promise.all(teams.map(t => getRoster(t.id)));
+  const rosterMap = await getSeasonRosters(season.id);
+  const allRosters = teams.map((t) => rosterMap.get(t.id) ?? []);
 
   const stats = [];
   for (let i = 0; i < teams.length; i++) {

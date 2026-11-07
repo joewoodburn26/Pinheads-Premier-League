@@ -2,7 +2,7 @@ import Image from "next/image";
 import { Trophy, Zap } from "lucide-react";
 import { TeamCard } from "@/components/team-card";
 import { Card } from "@/components/ui/card";
-import { getActiveSeason, getTeams, getRoster, getStats, getSchedule } from "@/lib/data";
+import { getActiveSeason, getTeams, getSeasonRosters, getStats, getSchedule } from "@/lib/data";
 import { winPct } from "@/lib/utils";
 import { pickAce } from "@/lib/ace";
 import type { Pokemon } from "@/lib/types";
@@ -18,7 +18,8 @@ export default async function HomePage() {
   ]);
 
   // Each team's ace: coach's pick, or highest point value as a fallback
-  const rostersRaw = await Promise.all(teams.map((t) => getRoster(t.id)));
+  const slotsByTeam = season ? await getSeasonRosters(season.id) : new Map<string, never[]>();
+  const rostersRaw = teams.map((t) => slotsByTeam.get(t.id) ?? []);
   const topPokemonMap: Record<string, Pokemon> = {};
   const rosterMap: Record<string, Pokemon[]> = {};
   teams.forEach((team, i) => {

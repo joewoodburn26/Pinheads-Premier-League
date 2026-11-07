@@ -1,6 +1,6 @@
 import { CalcClient, type CalcPokemon, type CalcTeam } from "@/components/calculator/calc-client";
 import { getCurrentUser } from "@/lib/auth";
-import { getActiveSeason, getPokemon, getRoster, getTeams } from "@/lib/data";
+import { getActiveSeason, getPokemon, getSeasonRosters, getTeams } from "@/lib/data";
 import { filterAvailable, formatLabel, formatMode, showdownName } from "@/lib/dex";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,8 @@ export default async function DamageCalculatorPage() {
   }
 
   const [allPokemon, teams, user] = await Promise.all([getPokemon(), getTeams(season.id), getCurrentUser()]);
-  const rosters = await Promise.all(teams.map((t) => getRoster(t.id)));
+  const rosterMap = await getSeasonRosters(season.id);
+  const rosters = teams.map((t) => rosterMap.get(t.id) ?? []);
 
   // Season format → which calc generation and movepools apply
   const mode = formatMode(season.format);

@@ -2,7 +2,8 @@
 
 import { requireAdmin, requireCoachEditor, requireSignedIn, requireTeamEditor } from "@/lib/auth";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { POKEDEX_TAG } from "@/lib/data";
 import { z } from "zod";
 import { hasSupabaseEnv } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -90,6 +91,7 @@ export async function updatePokemonCost(pokemonId: string, pointValue: number, s
       await supabase.from("pokemon").update({ point_value: pointValue }).eq("id", pokemonId);
   if (error) throw new Error(error.message);
 
+  revalidateTag(POKEDEX_TAG);
   revalidatePath("/", "layout");
 }
 

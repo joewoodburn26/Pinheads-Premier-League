@@ -1,5 +1,7 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { hasSupabaseEnv, createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { pokemon, rulesHtml, schedule, seasons, stats, teamPokemon, teams } from "@/lib/mock-data";
 import type { Season, Team, Pokemon, TeamPokemon, ScheduleMatch, PokemonStats, Coach, PokemonType } from "@/lib/types";
 
@@ -87,22 +89,46 @@ export async function getTeam(id: string): Promise<Team | undefined> {
 // A season can override any Pokémon's points (Point Restructure / CSV import /
 // "Copy Points"). Everything below uses the season's value when one exists.
 
-const getSeasonPoints = cache(async (seasonId: string): Promise<Map<string, number>> => {
-  if (!hasSupabaseEnv() || !seasonId) return new Map();
-  const supabase = await createSupabaseServerClient();
-  const map = new Map<string, number>();
-  // Page through in case a season overrides every Pokémon
+// The Pokédex and season points rarely change but are used on most pages, so they're kept
+// in Next's data cache instead of being re-read from Supabase on every page view.
+// Anything that changes points or bans calls revalidateTag(POKEDEX_TAG); the cache
+// also refreshes on its own every 10 minutes (e.g. after edits made directly in Supabase).
+export const POKEDEX_TAG = "pokedex";
+const POKEDEX_TTL = 600;
+
+/** Supabase returns at most 1,000 rows per request, so read big tables in pages. */
+async function readAllPages<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
+  const out: T[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase
-      .from("season_point_values")
-      .select("pokemon_id, point_value")
-      .eq("season_id", seasonId)
-      .range(from, from + 999);
-    if (error || !data) break;
-    for (const row of data) map.set(row.pokemon_id as string, row.point_value as number);
+    const { data, error } = await page(from, from + 999);
+    // Throwing keeps a failed read out of the cache (callers fall back to empty)
+    if (error) throw new Error(String((error as { message?: string }).message ?? error));
+    if (!data) break;
+    out.push(...data);
     if (data.length < 1000) break;
   }
-  return map;
+  return out;
+}
+
+const cachedSeasonPoints = unstable_cache(
+  async (seasonId: string): Promise<[string, number][]> => {
+    const rows = await readAllPages<{ pokemon_id: string; point_value: number }>((from, to) =>
+      createSupabaseAdminClient()
+        .from("season_point_values")
+        .select("pokemon_id, point_value")
+        .eq("season_id", seasonId)
+        .order("pokemon_id")
+        .range(from, to),
+    );
+    return rows.map((r) => [r.pokemon_id, r.point_value]);
+  },
+  ["season-points"],
+  { tags: [POKEDEX_TAG], revalidate: POKEDEX_TTL },
+);
+
+const getSeasonPoints = cache(async (seasonId: string): Promise<Map<string, number>> => {
+  if (!hasSupabaseEnv() || !seasonId) return new Map();
+  return new Map(await cachedSeasonPoints(seasonId).catch(() => []));
 });
 
 function applyPoints<T extends { id: string; pointValue: number }>(mon: T, points: Map<string, number>): T {
@@ -126,37 +152,27 @@ export async function getPokemon(seasonId?: string): Promise<Pokemon[]> {
   return points.size === 0 ? base : base.map((p) => applyPoints(p, points));
 }
 
-/** Pokémon with their base (Pokédex) points, ignoring season overrides. */
-export async function getBasePokemon(): Promise<Pokemon[]> {
-  if (!hasSupabaseEnv()) return pokemon;
-  const supabase = await createSupabaseServerClient();
-  const { data } = await supabase
-    .from("pokemon")
-    .select("*")
-    .order("point_value", { ascending: false });
+const cachedBasePokemon = unstable_cache(
+  async (): Promise<Pokemon[]> => {
+    const rows = await readAllPages<Record<string, unknown>>((from, to) =>
+      createSupabaseAdminClient()
+        .from("pokemon")
+        .select("*")
+        .order("point_value", { ascending: false })
+        .order("id")
+        .range(from, to),
+    );
+    return rows.map(mapPokemon);
+  },
+  ["pokedex-base"],
+  { tags: [POKEDEX_TAG], revalidate: POKEDEX_TTL },
+);
 
-  return (data ?? []).map(row => ({
-    id:             row.id,
-    dexNumber:      row.dex_number,
-    name:           row.name,
-    spriteUrl:      row.sprite_url,
-    primaryType:    row.primary_type,
-    secondaryType:  row.secondary_type ?? null,
-    hp:             row.hp,
-    attack:         row.attack,
-    defense:        row.defense,
-    specialAttack:  row.special_attack,
-    specialDefense: row.special_defense,
-    speed:          row.speed,
-    bst:            row.bst,
-    pointValue:     row.point_value,
-    legendary:      row.legendary,
-    mythical:       row.mythical,
-    paradox:        row.paradox,
-    ultraBeast:     row.ultra_beast ?? false,
-    banned:         row.banned ?? undefined,
-  }));
-}
+/** Pokémon with their base (Pokédex) points, ignoring season overrides. */
+export const getBasePokemon = cache(async (): Promise<Pokemon[]> => {
+  if (!hasSupabaseEnv()) return pokemon;
+  return cachedBasePokemon().catch(() => [] as Pokemon[]);
+});
 
 export const getAllPokemon = getPokemon;
 
@@ -175,6 +191,17 @@ export async function getTeamPokemon(seasonId: string): Promise<TeamPokemon[]> {
     pokemon: row.pokemon ? mapPokemon(row.pokemon) : undefined,
   })));
 }
+
+/** Every team's roster for a season in one query: teamId → slots (in saved order). */
+export const getSeasonRosters = cache(async (seasonId: string): Promise<Map<string, TeamPokemon[]>> => {
+  const map = new Map<string, TeamPokemon[]>();
+  for (const slot of await getTeamPokemon(seasonId)) {
+    const list = map.get(slot.teamId) ?? [];
+    list.push(slot);
+    map.set(slot.teamId, list);
+  }
+  return map;
+});
 
 export async function getRoster(teamId: string): Promise<TeamPokemon[]> {
   if (!hasSupabaseEnv()) return teamPokemon.filter(s => s.teamId === teamId);
