@@ -56,20 +56,39 @@ export async function getTeams(seasonId?: string): Promise<Team[]> {
   if (!hasSupabaseEnv()) return teams.filter(t => !seasonId || t.seasonId === seasonId);
   const supabase = await createSupabaseServerClient();
   const id = seasonId ?? (await getActiveSeason()).id;
-  const { data } = await supabase
-    .from("teams")
-    .select("*, coach:coaches(*)")
-    .eq("season_id", id)
-    .order("wins", { ascending: false });
+  const [{ data }, { data: results }] = await Promise.all([
+    supabase.from("teams").select("*, coach:coaches(*)").eq("season_id", id),
+    supabase.from("schedule_matches").select("home_team, away_team, winner, is_bye").eq("season_id", id),
+  ]);
 
-  return (data ?? []).map(row => ({
+  // Records come straight from the reported regular-season results, so they're always
+  // in step with the schedule (the stored wins/losses columns can go stale, e.g. after
+  // the schedule is wiped). Falls back to the stored numbers if the schedule can't be read.
+  const record = new Map<string, { wins: number; losses: number }>();
+  for (const m of results ?? []) {
+    if (!m.winner || m.is_bye) continue;
+    const loser = m.home_team === m.winner ? m.away_team : m.home_team;
+    const w = record.get(m.winner) ?? { wins: 0, losses: 0 };
+    const l = record.get(loser) ?? { wins: 0, losses: 0 };
+    w.wins++;
+    l.losses++;
+    record.set(m.winner, w);
+    record.set(loser, l);
+  }
+  const recordOf = (row: { id: string; wins: number; losses: number }) =>
+    results ? record.get(row.id) ?? { wins: 0, losses: 0 } : { wins: row.wins, losses: row.losses };
+
+  return (data ?? [])
+    .map(row => ({ row, rec: recordOf(row) }))
+    .sort((a, b) => b.rec.wins - a.rec.wins)
+    .map(({ row, rec }) => ({
     id:         row.id,
     seasonId:   row.season_id,
     coachId:    row.coach_id,
     teamName:   row.team_name,
     logoUrl:    row.logo_url ?? null,
-    wins:       row.wins,
-    losses:     row.losses,
+    wins:       rec.wins,
+    losses:     rec.losses,
     draftOrder: row.draft_order ?? undefined,
     acePokemonId: row.ace_pokemon_id ?? null,
     coach: row.coach

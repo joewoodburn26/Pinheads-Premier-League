@@ -6,6 +6,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { POKEDEX_TAG } from "@/lib/data";
 import { requireAdmin } from "@/lib/auth";
+import { recomputeRecords } from "@/lib/report-store";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type Result = { error?: string };
@@ -64,6 +65,8 @@ async function buildSchedule(supabase: Supabase, seasonId: string) {
 
   const { error: delError } = await supabase.from("schedule_matches").delete().eq("season_id", seasonId);
   if (delError) throw new Error(delError.message);
+  // A fresh schedule has no results, so every record goes back to 0-0
+  await recomputeRecords(supabase, seasonId);
   if (!teams || teams.length < 2) return;
 
   const ids: string[] = teams.map((t) => t.id as string);

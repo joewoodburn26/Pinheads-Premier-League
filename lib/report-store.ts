@@ -75,8 +75,13 @@ export async function isLegacyImport(supabase: Admin, url: string): Promise<bool
 }
 
 export async function recomputeRecords(supabase: Admin, seasonId: string) {
-  const { data: matches } = await supabase.from("schedule_matches").select("*").eq("season_id", seasonId);
+  const [{ data: matches }, { data: teams }] = await Promise.all([
+    supabase.from("schedule_matches").select("*").eq("season_id", seasonId),
+    supabase.from("teams").select("id").eq("season_id", seasonId),
+  ]);
   const record: Record<string, { wins: number; losses: number }> = {};
+  // Every team starts at 0-0, including ones with no games left on the schedule
+  for (const t of teams ?? []) record[t.id as string] = { wins: 0, losses: 0 };
   for (const m of matches ?? []) {
     for (const t of [m.home_team, m.away_team]) record[t] ??= { wins: 0, losses: 0 };
     if (!m.winner || m.is_bye) continue;
