@@ -82,7 +82,7 @@ export function DraftOrderCards({ teams, onReorder, locked = false }: {
             <span className="text-xs font-black text-muted-foreground w-5 text-center shrink-0">{idx + 1}</span>
             <div className="grid size-9 place-items-center rounded-md border bg-muted text-xs font-black shrink-0 overflow-hidden">
               {team.logoUrl
-                ? <Image src={`${team.logoUrl}?v=${Date.now()}`} alt="" width={36} height={36} className="size-9 object-cover" unoptimized />
+                ? <Image src={team.logoUrl} alt="" width={36} height={36} className="size-9 object-cover" unoptimized />
                 : initials(team.teamName)
               }
             </div>

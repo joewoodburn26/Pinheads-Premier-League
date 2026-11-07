@@ -4,21 +4,17 @@ import { useState, useTransition } from "react";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// Vercel rejects request bodies over ~4.5 MB, so shrink images in the browser first.
-const MAX_DIMENSION = 1600;
+// Images are resized and compressed in the browser before upload: smaller files load
+// faster and keep Supabase's data usage down. (Vercel also rejects bodies over ~4.5 MB.)
+const MAX_DIMENSION = { "team-logo": 1200, "coach-image": 400 } as const;
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 
-async function shrinkImage(file: File): Promise<File> {
+async function shrinkImage(file: File, kind: keyof typeof MAX_DIMENSION): Promise<File> {
   // Leave GIFs/SVGs alone (resizing would lose animation / vectors)
   if (file.type === "image/gif" || file.type === "image/svg+xml") return file;
 
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
-  if (scale === 1 && file.size <= MAX_UPLOAD_BYTES) {
-    bitmap.close();
-    return file;
-  }
-
+  const scale = Math.min(1, MAX_DIMENSION[kind] / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
@@ -30,10 +26,9 @@ async function shrinkImage(file: File): Promise<File> {
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();
 
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/webp", 0.85),
-  );
-  if (!blob) return file;
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.8));
+  // Keep the original if it was already smaller (e.g. a tiny, well-compressed image)
+  if (!blob || (scale === 1 && blob.size >= file.size)) return file;
 
   const baseName = file.name.replace(/\.[^.]+$/, "") || "image";
   return new File([blob], `${baseName}.webp`, { type: "image/webp" });
@@ -63,7 +58,7 @@ export function ImageUploadForm({ targetId, kind }: { targetId: string; kind: "t
         startTransition(async () => {
           try {
             setMessage("Uploading…");
-            const file = await shrinkImage(picked);
+            const file = await shrinkImage(picked, kind);
             if (file.size > MAX_UPLOAD_BYTES) {
               setMessage("Image is too large — try a smaller one.");
               return;

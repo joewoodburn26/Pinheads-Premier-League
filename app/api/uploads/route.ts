@@ -40,7 +40,12 @@ export async function POST(request: Request) {
     const path = `${input.kind}/${input.targetId}-${Date.now()}.${extension}`;
     const { error } = await supabase.storage
       .from("team-assets")
-      .upload(path, file, { upsert: true, contentType: file.type || undefined });
+      .upload(path, file, {
+        upsert: true,
+        contentType: file.type || undefined,
+        // Every upload gets a new file name, so browsers and Supabase's CDN can keep it for a year
+        cacheControl: "31536000",
+      });
     if (error) return fail(error.message, 500);
 
     const { data } = supabase.storage.from("team-assets").getPublicUrl(path);

@@ -45,7 +45,7 @@ export function TeamCard({ team, topPokemon, roster, rank, diff }: TeamCardProps
         <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted">
           {team.logoUrl ? (
             <Image
-              src={`${team.logoUrl}?v=${Date.now()}`}
+              src={team.logoUrl}
               alt={team.teamName}
               fill
               sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
@@ -70,7 +70,7 @@ export function TeamCard({ team, topPokemon, roster, rank, diff }: TeamCardProps
           {team.coach?.imageUrl && (
             <div className="absolute right-3 top-3 size-10 overflow-hidden rounded-full border-2 border-white/70 shadow-md">
               <Image
-                src={`${team.coach.imageUrl}?v=${Date.now()}`}
+                src={team.coach.imageUrl}
                 alt={team.coach.name}
                 width={40}
                 height={40}

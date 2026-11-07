@@ -169,7 +169,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
           <div className="relative aspect-[16/9] w-full sm:aspect-[21/9]">
             {team.logoUrl ? (
               <Image
-                src={`${team.logoUrl}?v=${Date.now()}`}
+                src={team.logoUrl}
                 alt={team.teamName}
                 fill
                 priority
@@ -210,7 +210,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
               >
                 {team.coach?.imageUrl ? (
                   <Image
-                    src={`${team.coach.imageUrl}?v=${Date.now()}`}
+                    src={team.coach.imageUrl}
                     alt={team.coach.name}
                     width={96}
                     height={96}
