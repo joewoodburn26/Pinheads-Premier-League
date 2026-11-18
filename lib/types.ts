@@ -6,6 +6,8 @@ export type Season = {
   format?: string;          // e.g. "all", "gen9", "champs", "gen8" …
   /** How many teams make the playoffs (undefined = everyone) */
   playoffTeams?: number;
+  /** The point list (points + bans) this season uses */
+  pointListId?: string;
   activeSeason: boolean;
   archived: boolean;
   createdAt: string;
@@ -110,3 +112,11 @@ export type PokemonType =
   | "Dark"
   | "Steel"
   | "Fairy";
+
+/** A named set of point values + bans ("Default", "VGC Default" …) that seasons use. */
+export type PointList = {
+  id: string;
+  name: string;
+  /** Seasons using this list */
+  seasons: { id: string; name: string; format?: string; activeSeason: boolean }[];
+};

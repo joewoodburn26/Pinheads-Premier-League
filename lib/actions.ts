@@ -2,8 +2,7 @@
 
 import { requireAdmin, requireCoachEditor, requireSignedIn, requireTeamEditor } from "@/lib/auth";
 
-import { revalidatePath, revalidateTag } from "next/cache";
-import { POKEDEX_TAG } from "@/lib/data";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { hasSupabaseEnv } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -73,26 +72,6 @@ export async function duplicateSeason(formData: FormData) {
     }
   }
   revalidatePath("/seasons");
-}
-
-export async function updatePokemonCost(pokemonId: string, pointValue: number, seasonId?: string) {
-  await requireAdmin();
-  if (!hasSupabaseEnv()) return;
-  const supabase = createSupabaseAdminClient();
-
-  const { error } = seasonId
-    ? // Season-specific points
-      await supabase.from("season_point_values").upsert({
-        season_id: seasonId,
-        pokemon_id: pokemonId,
-        point_value: pointValue,
-      }, { onConflict: "season_id,pokemon_id" })
-    : // Base (Pokédex) points
-      await supabase.from("pokemon").update({ point_value: pointValue }).eq("id", pokemonId);
-  if (error) throw new Error(error.message);
-
-  revalidateTag(POKEDEX_TAG);
-  revalidatePath("/", "layout");
 }
 
 export async function updateTeamName(teamId: string, formData: FormData) {

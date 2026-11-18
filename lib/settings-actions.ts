@@ -7,6 +7,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { POKEDEX_TAG } from "@/lib/data";
 import { requireAdmin } from "@/lib/auth";
 import { recomputeRecords } from "@/lib/report-store";
+import { createListCopy } from "@/lib/point-lists-store";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type Result = { error?: string };
@@ -109,13 +110,13 @@ export async function createNewSeason(formData: FormData): Promise<Result> {
     const copyCoaches = bool(formData.get("copyCoaches"));
     const copyRosters = bool(formData.get("copyRosters"));
     const copyLogos = bool(formData.get("copyLogos"));
-    const copyPoints = bool(formData.get("copyPoints"));
-    const pointsSourceId = String(formData.get("pointsSourceId") ?? "") || sourceSeasonId;
+    const pointListId = String(formData.get("pointListId") ?? "") || null;
+    const ownPointList = bool(formData.get("ownPointList"));
 
     // 1. Season
     const { data: season, error } = await supabase
       .from("seasons")
-      .insert({ name, draft_budget: draftBudget, roster_size: rosterSize, format, active_season: false, archived: false })
+      .insert({ name, draft_budget: draftBudget, roster_size: rosterSize, format, active_season: false, archived: false, ...(pointListId ? { point_list_id: pointListId } : {}) })
       .select("id")
       .single();
     if (error || !season) {
@@ -162,19 +163,10 @@ export async function createNewSeason(formData: FormData): Promise<Result> {
         }
       }
 
-      // 3. Season point values
-      if (copyPoints && pointsSourceId) {
-        const { data: points, error: pointsError } = await supabase
-          .from("season_point_values")
-          .select("pokemon_id, point_value")
-          .eq("season_id", pointsSourceId);
-        if (pointsError) throw new Error(`Couldn't copy points: ${pointsError.message}`);
-        if (points && points.length > 0) {
-          const { error: insError } = await supabase
-            .from("season_point_values")
-            .insert(points.map((p) => ({ season_id: seasonId, pokemon_id: p.pokemon_id, point_value: p.point_value })));
-          if (insError) throw new Error(`Couldn't copy points: ${insError.message}`);
-        }
+      // 3. Points: its own copy of the chosen list, named after the season
+      if (ownPointList) {
+        const listId = await createListCopy(supabase, `${name} points`, pointListId);
+        await supabase.from("seasons").update({ point_list_id: listId }).eq("id", seasonId);
       }
 
       // 4. Schedule
@@ -219,6 +211,18 @@ export async function deleteSeason(seasonId: string): Promise<Result> {
   });
 }
 
+/** Season name and draft budget. */
+export async function updateSeasonBasics(seasonId: string, name: string, draftBudget: number): Promise<Result> {
+  return run(async () => {
+    const n = name.trim();
+    if (!n) throw new Error("Give the season a name.");
+    if (!Number.isInteger(draftBudget) || draftBudget < 1 || draftBudget > 9999) throw new Error("The budget must be a whole number.");
+    const { error } = await createSupabaseAdminClient().from("seasons").update({ name: n, draft_budget: draftBudget }).eq("id", seasonId);
+    if (error) throw new Error(error.message.includes("duplicate") ? `A season called “${n}” already exists.` : error.message);
+    refreshAll();
+  });
+}
+
 export async function updateRosterSize(seasonId: string, rosterSize: number): Promise<Result> {
   return run(async () => {
     const { error } = await createSupabaseAdminClient().from("seasons").update({ roster_size: rosterSize }).eq("id", seasonId);
@@ -243,86 +247,6 @@ export async function updatePlayoffTeams(seasonId: string, teams: number | null)
     if (error) throw new Error(error.message.includes("playoff_teams") ? "Run supabase/playoffs.sql in Supabase first." : error.message);
     refreshAll();
   });
-}
-
-/**
- * CSV of "name or dex number, points". With a seasonId the values are saved as
- * that season's points; without one they change the base Pokédex points.
- */
-export async function updatePointsFromCsv(
-  csv: string,
-  seasonId?: string,
-): Promise<Result & { updated?: number; notFound?: string[] }> {
-  let updated = 0;
-  const notFound: string[] = [];
-  const result = await run(async () => {
-    const supabase = createSupabaseAdminClient();
-    // Split a CSV line, respecting "quoted, values"
-    const cells = (line: string): string[] => {
-      const out: string[] = [];
-      let cur = "";
-      let quoted = false;
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-        if (quoted) {
-          if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
-          else if (ch === '"') quoted = false;
-          else cur += ch;
-        } else if (ch === '"') quoted = true;
-        else if (ch === ",") { out.push(cur.trim()); cur = ""; }
-        else cur += ch;
-      }
-      out.push(cur.trim());
-      return out;
-    };
-
-    const lines = csv.replace(/\r/g, "").split("\n").map((l) => l.trim()).filter(Boolean);
-    // Works with the downloaded CSV (Name … Points columns) or a simple "name,points" list
-    const header = cells(lines[0] ?? "").map((h) => h.toLowerCase());
-    const hasHeader = header.includes("points");
-    const nameCol = hasHeader ? header.indexOf("name") : 0;
-    const dexCol = hasHeader ? header.findIndex((h) => h.startsWith("pokedex")) : -1;
-    const pointsCol = hasHeader ? header.indexOf("points") : 1;
-
-    const rows: { key: string; pointValue: number }[] = [];
-    for (const line of hasHeader ? lines.slice(1) : lines) {
-      const parts = cells(line);
-      const key = (nameCol >= 0 ? parts[nameCol] : "") || (dexCol >= 0 ? parts[dexCol] : "") || "";
-      const pts = Number(parts[pointsCol]);
-      if (!key || parts[pointsCol] === undefined || parts[pointsCol] === "" || isNaN(pts)) continue;
-      rows.push({ key, pointValue: pts });
-    }
-    if (rows.length === 0) throw new Error("No valid rows found in the CSV.");
-
-    const { data: allMons, error: monsError } = await supabase.from("pokemon").select("id, name, dex_number");
-    if (monsError) throw new Error(monsError.message);
-    const byName = new Map((allMons ?? []).map((p) => [String(p.name).toLowerCase(), p.id as string]));
-    const byDex = new Map<number, string>();
-    for (const p of allMons ?? []) if (!byDex.has(p.dex_number)) byDex.set(p.dex_number as number, p.id as string);
-
-    const resolved: { id: string; pointValue: number }[] = [];
-    for (const { key, pointValue } of rows) {
-      const id = /^\d+$/.test(key) ? byDex.get(Number(key)) : byName.get(key.toLowerCase());
-      if (id) resolved.push({ id, pointValue });
-      else notFound.push(key);
-    }
-
-    if (seasonId) {
-      for (let i = 0; i < resolved.length; i += 500) {
-        const chunk = resolved.slice(i, i + 500).map((r) => ({ season_id: seasonId, pokemon_id: r.id, point_value: r.pointValue }));
-        const { error } = await supabase.from("season_point_values").upsert(chunk, { onConflict: "season_id,pokemon_id" });
-        if (error) throw new Error(error.message);
-      }
-    } else {
-      for (const r of resolved) {
-        const { error } = await supabase.from("pokemon").update({ point_value: r.pointValue }).eq("id", r.id);
-        if (error) throw new Error(error.message);
-      }
-    }
-    updated = resolved.length;
-    refreshAll();
-  });
-  return { ...result, updated, notFound };
 }
 
 // ─── Team actions ─────────────────────────────────────────────────────────────

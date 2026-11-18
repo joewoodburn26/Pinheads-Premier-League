@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache";
 import { hasSupabaseEnv, createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { pokemon, rulesHtml, schedule, seasons, stats, teamPokemon, teams } from "@/lib/mock-data";
-import type { Season, Team, Pokemon, TeamPokemon, ScheduleMatch, PokemonStats, Coach, PokemonType } from "@/lib/types";
+import type { PointList, Season, Team, Pokemon, TeamPokemon, ScheduleMatch, PokemonStats, Coach, PokemonType } from "@/lib/types";
 
 // ─── Seasons ─────────────────────────────────────────────────────────────────
 
@@ -24,6 +24,7 @@ async function loadSeasons(): Promise<Season[]> {
     rosterSize:   row.roster_size ?? undefined,
     format:       row.format ?? undefined,
     playoffTeams: row.playoff_teams ?? undefined,
+    pointListId:  row.point_list_id ?? undefined,
     activeSeason: row.active_season,
     archived:     row.archived,
     createdAt:    row.created_at,
@@ -129,30 +130,60 @@ async function readAllPages<T>(page: (from: number, to: number) => PromiseLike<{
   return out;
 }
 
-const cachedSeasonPoints = unstable_cache(
-  async (seasonId: string): Promise<[string, number][]> => {
+/** [pokemonId, points, banned (null = keep the Pokédex value)] */
+type ListEntry = [string, number, boolean | null];
+
+async function readListValues(listId: string): Promise<ListEntry[]> {
+  const rows = await readAllPages<{ pokemon_id: string; point_value: number; banned: boolean }>((from, to) =>
+    createSupabaseAdminClient()
+      .from("point_list_values")
+      .select("pokemon_id, point_value, banned")
+      .eq("list_id", listId)
+      .order("pokemon_id")
+      .range(from, to),
+  );
+  return rows.map((r) => [r.pokemon_id, r.point_value, r.banned]);
+}
+
+const cachedListValues = unstable_cache(readListValues, ["point-list-values"], {
+  tags: [POKEDEX_TAG],
+  revalidate: POKEDEX_TTL,
+});
+
+const cachedSeasonValues = unstable_cache(
+  async (seasonId: string): Promise<ListEntry[]> => {
+    const admin = createSupabaseAdminClient();
+    const { data: season, error } = await admin.from("seasons").select("point_list_id").eq("id", seasonId).single();
+    if (!error && season?.point_list_id) return readListValues(season.point_list_id as string);
+
+    // Database without point lists yet (supabase/point-lists.sql not run): old per-season points
     const rows = await readAllPages<{ pokemon_id: string; point_value: number }>((from, to) =>
-      createSupabaseAdminClient()
+      admin
         .from("season_point_values")
         .select("pokemon_id, point_value")
         .eq("season_id", seasonId)
         .order("pokemon_id")
         .range(from, to),
-    );
-    return rows.map((r) => [r.pokemon_id, r.point_value]);
+    ).catch(() => []);
+    return rows.map((r) => [r.pokemon_id, r.point_value, null]);
   },
-  ["season-points"],
+  ["season-point-values"],
   { tags: [POKEDEX_TAG], revalidate: POKEDEX_TTL },
 );
 
-const getSeasonPoints = cache(async (seasonId: string): Promise<Map<string, number>> => {
+type ListValue = { points: number; banned: boolean | null };
+
+const toMap = (entries: ListEntry[]) => new Map<string, ListValue>(entries.map(([id, points, banned]) => [id, { points, banned }]));
+
+const getSeasonPoints = cache(async (seasonId: string): Promise<Map<string, ListValue>> => {
   if (!hasSupabaseEnv() || !seasonId) return new Map();
-  return new Map(await cachedSeasonPoints(seasonId).catch(() => []));
+  return toMap(await cachedSeasonValues(seasonId).catch(() => []));
 });
 
-function applyPoints<T extends { id: string; pointValue: number }>(mon: T, points: Map<string, number>): T {
-  const override = points.get(mon.id);
-  return override === undefined ? mon : { ...mon, pointValue: override };
+function applyPoints<T extends { id: string; pointValue: number; banned?: boolean }>(mon: T, points: Map<string, ListValue>): T {
+  const v = points.get(mon.id);
+  if (!v) return mon;
+  return { ...mon, pointValue: v.points, banned: v.banned ?? mon.banned };
 }
 
 async function applySlotPoints(slots: TeamPokemon[]): Promise<TeamPokemon[]> {
@@ -167,7 +198,7 @@ async function applySlotPoints(slots: TeamPokemon[]): Promise<TeamPokemon[]> {
 export async function getPokemon(seasonId?: string): Promise<Pokemon[]> {
   const base = await getBasePokemon();
   const id = seasonId ?? (await getActiveSeason())?.id;
-  const points = id ? await getSeasonPoints(id) : new Map<string, number>();
+  const points = id ? await getSeasonPoints(id) : new Map<string, ListValue>();
   return points.size === 0 ? base : base.map((p) => applyPoints(p, points));
 }
 
@@ -194,6 +225,32 @@ export const getBasePokemon = cache(async (): Promise<Pokemon[]> => {
 });
 
 export const getAllPokemon = getPokemon;
+
+// ─── Point lists ─────────────────────────────────────────────────────────────
+
+const MOCK_LIST_ID = "default";
+
+/** Every point list and the seasons using it ([] before supabase/point-lists.sql is run). */
+export const getPointLists = cache(async (): Promise<PointList[]> => {
+  const allSeasons = await getSeasons();
+  const using = (listId: string) =>
+    allSeasons
+      .filter((s) => (hasSupabaseEnv() ? s.pointListId === listId : true))
+      .map((s) => ({ id: s.id, name: s.name, format: s.format, activeSeason: s.activeSeason }));
+  if (!hasSupabaseEnv()) return [{ id: MOCK_LIST_ID, name: "Default", seasons: using(MOCK_LIST_ID) }];
+
+  const { data, error } = await createSupabaseAdminClient().from("point_lists").select("id, name").order("created_at");
+  if (error) return [];
+  return (data ?? []).map((l) => ({ id: l.id as string, name: l.name as string, seasons: using(l.id as string) }));
+});
+
+/** Every Pokémon with this list's points and bans (Pokédex values for any it doesn't cover). */
+export async function getListPokemon(listId: string): Promise<Pokemon[]> {
+  const base = await getBasePokemon();
+  if (!hasSupabaseEnv()) return base;
+  const values = toMap(await cachedListValues(listId));
+  return base.map((p) => applyPoints(p, values));
+}
 
 // ─── Team Pokémon ─────────────────────────────────────────────────────────────
 

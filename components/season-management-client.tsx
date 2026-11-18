@@ -1,679 +1,694 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Trash2, Star, Archive, Plus, Minus, RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  Archive, ArchiveRestore, CalendarDays, ChevronDown, ChevronRight, ExternalLink, Minus, Plus,
+  RefreshCw, Settings2, Star, Trash2, Users, X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  createNewSeason, setActiveSeason, archiveSeason,
-  deleteSeason, applyTeamChanges, regenerateSchedule,
-  updateRosterSize, updateSeasonFormat, updatePlayoffTeams,
+  applyTeamChanges, archiveSeason, createNewSeason, deleteSeason, regenerateSchedule, setActiveSeason,
+  updatePlayoffTeams, updateRosterSize, updateSeasonBasics, updateSeasonFormat,
 } from "@/lib/settings-actions";
-import type { Season, Team } from "@/lib/types";
+import { setSeasonPointList, splitSeasonPointList } from "@/lib/point-list-actions";
+import { FORMAT_OPTIONS, formatName } from "@/lib/formats";
+import type { PointList, Season, Team } from "@/lib/types";
 
-// ─── Format options (shared with randomizer) ─────────────────────────────────
-
-const FORMAT_OPTIONS = [
-  { label: "All Pokémon (no restriction)", value: "all" },
-  { label: "Gen 9 National Dex",           value: "gen9" },
-  { label: "Pokémon Champions",            value: "champs" },
-  { label: "Gen 8 National Dex",           value: "gen8" },
-  { label: "Gen 7 National Dex",           value: "gen7" },
-  { label: "Gen 6 National Dex",           value: "gen6" },
-  { label: "Gen 5 National Dex",           value: "gen5" },
-  { label: "Gen 4 National Dex",           value: "gen4" },
-  { label: "Gen 3 National Dex",           value: "gen3" },
-  { label: "Gen 2 National Dex",           value: "gen2" },
-  { label: "Gen 1 National Dex",           value: "gen1" },
+type Tab = "settings" | "teams" | "schedule" | "danger";
+const TABS: { key: Tab; label: string; icon: typeof Settings2 }[] = [
+  { key: "settings", label: "Settings", icon: Settings2 },
+  { key: "teams", label: "Teams", icon: Users },
+  { key: "schedule", label: "Schedule", icon: CalendarDays },
+  { key: "danger", label: "Danger zone", icon: Trash2 },
 ];
 
-// ─── Delete warning modal ─────────────────────────────────────────────────────
+type Flash = { text: string; tone: "ok" | "error" } | null;
 
-function DeleteWarning({ label, items, onConfirm, onCancel, isPending }: {
-  label: string; items: string[];
-  onConfirm: () => void; onCancel: () => void; isPending: boolean;
-}) {
+const label = "text-xs font-semibold uppercase tracking-wider text-muted-foreground";
+const select = "w-full rounded-md border bg-background px-3 py-2 text-sm";
+
+// ─── Small pieces ─────────────────────────────────────────────────────────────
+
+function Toggle({ label: text, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <Card className="w-full max-w-md p-6 space-y-4 border-destructive">
-        <div className="flex items-center gap-3">
-          <span className="text-3xl">⚠️</span>
-          <h2 className="text-2xl font-black text-destructive">WARNING</h2>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          You are about to permanently delete <span className="font-bold text-foreground">{label}</span> including:
-        </p>
-        <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-          {items.map(item => <li key={item}>{item}</li>)}
-        </ul>
-        <p className="text-sm font-semibold text-destructive">This cannot be undone.</p>
-        <div className="flex gap-3 pt-2">
-          <Button variant="secondary" className="flex-1" onClick={onCancel} disabled={isPending}>Cancel</Button>
-          <Button className="flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            onClick={onConfirm} disabled={isPending}>
-            {isPending ? "Deleting…" : "Yes, Delete Everything"}
-          </Button>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-// ─── Toggle ───────────────────────────────────────────────────────────────────
-
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <label className="flex items-center gap-2 text-sm cursor-pointer">
-      <div onClick={() => onChange(!checked)}
-        className={`relative h-5 w-9 rounded-full transition-colors ${checked ? "bg-primary" : "bg-muted"}`}>
-        <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
-      </div>
-      {label}
+    <label className="flex cursor-pointer items-center gap-2 text-sm">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${checked ? "bg-primary" : "bg-muted"}`}
+      >
+        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
+      </button>
+      {text}
     </label>
   );
 }
 
-// ─── Season settings editor (roster size + format) ────────────────────────────
+function Stepper({ value, min, max, onChange }: { value: number; min: number; max: number; onChange: (v: number) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <button type="button" onClick={() => onChange(Math.max(min, value - 1))} className="rounded-md border bg-muted px-2 py-2 hover:bg-muted/80" aria-label="Less">
+        <Minus size={14} />
+      </button>
+      <Input
+        type="number"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => onChange(Math.min(max, Math.max(min, Number(e.target.value) || min)))}
+        className="w-16 text-center text-lg font-bold"
+      />
+      <button type="button" onClick={() => onChange(Math.min(max, value + 1))} className="rounded-md border bg-muted px-2 py-2 hover:bg-muted/80" aria-label="More">
+        <Plus size={14} />
+      </button>
+    </div>
+  );
+}
 
-function SeasonSettingsEditor({ season, teamCount }: { season: Season; teamCount: number }) {
+/** One setting: title + help on the left, control on the right (stacks on phones). */
+function Row({ title, help, children }: { title: string; help?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="grid gap-3 border-b py-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] md:gap-6">
+      <div>
+        <p className="font-semibold">{title}</p>
+        {help && <p className="mt-0.5 text-xs text-muted-foreground">{help}</p>}
+      </div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function Message({ flash }: { flash: Flash }) {
+  if (!flash) return null;
+  return <p className={`text-sm ${flash.tone === "error" ? "text-red-400" : "text-green-400"}`}>{flash.text}</p>;
+}
+
+/** Runs a { error } action, shows the result, refreshes the page. */
+function useAction() {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
-
-  // Playoffs
-  const [playoffTeams, setPlayoffTeams] = useState(season.playoffTeams ? String(season.playoffTeams) : "all");
-  const [playoffSaved, setPlayoffSaved] = useState(false);
-  function handleSavePlayoffs() {
-    setSaveError("");
+  const [flash, setFlash] = useState<Flash>(null);
+  const run = (fn: () => Promise<{ error?: string }>, okText: string, after?: () => void) =>
     startTransition(async () => {
       try {
-        const r = await updatePlayoffTeams(season.id, playoffTeams === "all" ? null : Number(playoffTeams));
-        if (r.error) return setSaveError(r.error);
-        setPlayoffSaved(true);
-        setTimeout(() => setPlayoffSaved(false), 2000);
+        const r = await fn();
+        if (r.error) return setFlash({ text: r.error, tone: "error" });
+        setFlash({ text: okText, tone: "ok" });
+        after?.();
+        router.refresh();
       } catch {
-        setSaveError("Couldn't save the playoff size. Try again.");
+        setFlash({ text: "Something went wrong. Try again.", tone: "error" });
       }
     });
-  }
+  return { isPending, flash, setFlash, run };
+}
 
-  // Roster size
-  const [size,    setSize]    = useState(season.rosterSize ?? 10);
-  const [confirm, setConfirm] = useState(false);
-  const [sizeSaved, setSizeSaved] = useState(false);
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
-  // Format
-  const [format,      setFormat]      = useState(season.format ?? "all");
-  const [formatSaved, setFormatSaved] = useState(false);
-  const [saveError,   setSaveError]   = useState("");
+export function SeasonManagementClient({
+  seasons,
+  selected,
+  teams,
+  pointLists,
+  initialTab,
+}: {
+  seasons: Season[];
+  selected?: Season;
+  teams: Team[];
+  pointLists: PointList[];
+  initialTab?: string;
+}) {
+  const router = useRouter();
+  const [tab, setTab] = useState<Tab>(TABS.some((t) => t.key === initialTab) ? (initialTab as Tab) : "settings");
+  const [creating, setCreating] = useState(seasons.length === 0);
+  const [showArchived, setShowArchived] = useState(Boolean(selected?.archived));
 
-  function handleSaveSize() {
-    setSaveError("");
-    startTransition(async () => {
-      try {
-        const r = await updateRosterSize(season.id, size);
-        if (r.error) return setSaveError(r.error);
-        setSizeSaved(true);
-        setConfirm(false);
-        setTimeout(() => setSizeSaved(false), 2000);
-      } catch {
-        setSaveError("Couldn't save the roster size. Try again.");
-      }
-    });
-  }
+  const live = [...seasons.filter((s) => !s.archived)].sort((a, b) => Number(b.activeSeason) - Number(a.activeSeason));
+  const archived = seasons.filter((s) => s.archived);
+  const listName = (id?: string) => pointLists.find((l) => l.id === id)?.name;
 
-  function handleSaveFormat() {
-    setSaveError("");
-    startTransition(async () => {
-      try {
-        const r = await updateSeasonFormat(season.id, format);
-        if (r.error) return setSaveError(r.error);
-        setFormatSaved(true);
-        setTimeout(() => setFormatSaved(false), 2000);
-      } catch {
-        setSaveError("Couldn't save the format. Try again.");
-      }
-    });
-  }
+  const go = (seasonId: string, t: Tab = tab) => router.replace(`/settings/seasons?season=${seasonId}&tab=${t}`, { scroll: false });
+  const pickTab = (t: Tab) => {
+    setTab(t);
+    if (selected) go(selected.id, t);
+  };
+
+  const seasonPill = (s: Season) => {
+    const on = s.id === selected?.id;
+    return (
+      <button
+        key={s.id}
+        onClick={() => go(s.id)}
+        className={`min-w-[170px] rounded-xl border px-4 py-3 text-left transition-colors ${
+          on ? "border-primary bg-primary/10 ring-1 ring-primary/40" : "hover:bg-muted/50"
+        } ${s.archived ? "opacity-70" : ""}`}
+      >
+        <div className="flex items-center gap-2">
+          <span className="font-bold">{s.name}</span>
+          {s.activeSeason && <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-primary-foreground">ACTIVE</span>}
+        </div>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {formatName(s.format)} · {s.draftBudget} pts
+          {listName(s.pointListId) ? ` · ${listName(s.pointListId)}` : ""}
+        </p>
+      </button>
+    );
+  };
 
   return (
-    <div className="space-y-4">
-      {/* Roster size */}
-      <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold">Roster Size</p>
-            <p className="text-xs text-muted-foreground">Max Pokémon per team. Reducing will remove Pokémon over the limit.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => { setSize(s => Math.max(1, s - 1)); setConfirm(false); }}
-              className="rounded-md border bg-muted px-2 py-1.5 hover:bg-muted/80"><Minus size={14} /></button>
-            <span className="text-xl font-black w-8 text-center">{size}</span>
-            <button onClick={() => { setSize(s => Math.min(20, s + 1)); setConfirm(false); }}
-              className="rounded-md border bg-muted px-2 py-1.5 hover:bg-muted/80"><Plus size={14} /></button>
-          </div>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-4xl font-black max-md:text-3xl">Season Management</h1>
+          <p className="mt-1 text-muted-foreground">Pick a season to change its settings, teams and schedule.</p>
         </div>
-        {size !== (season.rosterSize ?? 10) && (
-          <div className="space-y-2">
-            {size < (season.rosterSize ?? 10) && !confirm && (
-              <p className="text-xs text-yellow-400">
-                ⚠️ Reducing from {season.rosterSize} to {size} will permanently remove Pokémon in slots {size + 1} to {season.rosterSize} for every team.
-              </p>
-            )}
-            <div className="flex gap-2">
-              {size < (season.rosterSize ?? 10) && !confirm ? (
-                <Button onClick={() => setConfirm(true)} variant="secondary">I understand — show confirm</Button>
-              ) : (
-                <Button onClick={handleSaveSize} disabled={isPending}
-                  className={size < (season.rosterSize ?? 10) ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}>
-                  {isPending ? "Saving…" : `Save Roster Size (${size})`}
-                </Button>
-              )}
-              <Button variant="secondary" onClick={() => { setSize(season.rosterSize ?? 10); setConfirm(false); }}>Reset</Button>
-            </div>
-            {sizeSaved && <p className="text-xs text-green-400">✓ Roster size updated</p>}
+        <Button onClick={() => setCreating((c) => !c)} variant={creating ? "secondary" : "primary"}>
+          {creating ? <><X size={14} className="mr-1" /> Close</> : <><Plus size={14} className="mr-1" /> New season</>}
+        </Button>
+      </div>
+
+      {creating && <NewSeasonPanel seasons={seasons} pointLists={pointLists} onDone={() => setCreating(false)} />}
+
+      {/* ── Season picker ── */}
+      <div className="space-y-2">
+        <div className="flex gap-2 overflow-x-auto pb-1">{live.map(seasonPill)}</div>
+        {archived.length > 0 && (
+          <div>
+            <button onClick={() => setShowArchived((v) => !v)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+              {showArchived ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Archived ({archived.length})
+            </button>
+            {showArchived && <div className="mt-2 flex gap-2 overflow-x-auto pb-1">{archived.map(seasonPill)}</div>}
           </div>
         )}
       </div>
 
-      {/* Format / Generation */}
-      <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
-        <div>
-          <p className="text-sm font-semibold">Format / Generation</p>
-          <p className="text-xs text-muted-foreground">
-            Decides which moves count in the Draft room search and on Prep. Pokémon Champions also limits the Draft room and roster picker to Pokémon that are in Champions.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <select
-            value={format}
-            onChange={e => setFormat(e.target.value)}
-            className="rounded-md border bg-background px-3 py-2 text-sm flex-1 min-w-0"
-          >
-            {FORMAT_OPTIONS.map(f => (
-              <option key={f.value} value={f.value}>{f.label}</option>
+      {/* ── Selected season ── */}
+      {selected ? (
+        <Card className="overflow-hidden p-0">
+          <div className="flex flex-wrap items-center gap-3 border-b bg-muted/20 px-5 py-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-2xl font-black">{selected.name}</h2>
+                {selected.activeSeason && <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">ACTIVE</span>}
+                {selected.archived && <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-bold">ARCHIVED</span>}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {teams.length} teams · {formatName(selected.format)} · {selected.draftBudget} pt budget · {selected.rosterSize ?? 10} Pokémon each
+              </p>
+            </div>
+            {!selected.activeSeason && !selected.archived && <SetActiveButton season={selected} />}
+          </div>
+
+          <div className="flex gap-1 overflow-x-auto border-b px-3">
+            {TABS.map(({ key, label: text, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => pickTab(key)}
+                className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors ${
+                  tab === key
+                    ? key === "danger" ? "border-red-500 text-red-400" : "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Icon size={14} /> {text}
+              </button>
             ))}
+          </div>
+
+          <div className="p-5">
+            {tab === "settings" && <SettingsTab season={selected} teamCount={teams.length} pointLists={pointLists} />}
+            {tab === "teams" && <TeamsTab season={selected} teams={teams} />}
+            {tab === "schedule" && <ScheduleTab season={selected} />}
+            {tab === "danger" && <DangerTab season={selected} />}
+          </div>
+        </Card>
+      ) : (
+        <Card className="p-10 text-center text-muted-foreground">No seasons yet. Create one to get started.</Card>
+      )}
+    </div>
+  );
+}
+
+function SetActiveButton({ season }: { season: Season }) {
+  const { isPending, flash, run } = useAction();
+  return (
+    <div className="flex items-center gap-2">
+      <Message flash={flash?.tone === "error" ? flash : null} />
+      <Button variant="secondary" disabled={isPending} onClick={() => run(() => setActiveSeason(season.id), "Active season updated.")}>
+        <Star size={14} className="mr-1" /> Make active
+      </Button>
+    </div>
+  );
+}
+
+// ─── Settings tab ─────────────────────────────────────────────────────────────
+
+function SettingsTab({ season, teamCount, pointLists }: { season: Season; teamCount: number; pointLists: PointList[] }) {
+  const basics = useAction();
+  const roster = useAction();
+  const fmt = useAction();
+  const points = useAction();
+  const playoffs = useAction();
+
+  const [name, setName] = useState(season.name);
+  const [budget, setBudget] = useState(season.draftBudget);
+  const [size, setSize] = useState(season.rosterSize ?? 10);
+  const [format, setFormat] = useState(season.format ?? "all");
+  const [listId, setListId] = useState(season.pointListId ?? "");
+  const [playoffTeams, setPlayoffTeams] = useState(season.playoffTeams ? String(season.playoffTeams) : "all");
+
+  const oldSize = season.rosterSize ?? 10;
+  const shrinking = size < oldSize;
+  const list = pointLists.find((l) => l.id === season.pointListId);
+  const sharedWith = list?.seasons.filter((s) => s.id !== season.id) ?? [];
+
+  return (
+    <div>
+      <Row title="Name and budget" help="The draft budget is the most points a team can spend.">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-[180px] flex-1 space-y-1">
+            <span className={label}>Name</span>
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="w-28 space-y-1">
+            <span className={label}>Budget</span>
+            <Input type="number" value={budget} onChange={(e) => setBudget(Number(e.target.value))} />
+          </div>
+          {(name !== season.name || budget !== season.draftBudget) && (
+            <Button disabled={basics.isPending} onClick={() => basics.run(() => updateSeasonBasics(season.id, name, budget), "Saved.")}>Save</Button>
+          )}
+        </div>
+        <div className="mt-2"><Message flash={basics.flash} /></div>
+      </Row>
+
+      <Row
+        title="Point list"
+        help={
+          <>
+            Points and bans for this season. Editing a list changes every season using it.{" "}
+            {list && <Link href={`/settings/point-restructure?list=${list.id}`} className="underline hover:text-foreground">Edit {list.name} <ExternalLink size={10} className="inline" /></Link>}
+          </>
+        }
+      >
+        {pointLists.length === 0 ? (
+          <p className="text-sm text-yellow-400">Run supabase/point-lists.sql in Supabase to set up point lists.</p>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              <select value={listId} onChange={(e) => setListId(e.target.value)} className={`${select} min-w-0 flex-1`}>
+                {!season.pointListId && <option value="">— Pick a list —</option>}
+                {pointLists.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}{l.seasons.filter((s) => s.id !== season.id).length ? ` (also ${l.seasons.filter((s) => s.id !== season.id).map((s) => s.name).join(", ")})` : ""}
+                  </option>
+                ))}
+              </select>
+              {listId && listId !== (season.pointListId ?? "") && (
+                <Button disabled={points.isPending} onClick={() => points.run(() => setSeasonPointList(season.id, listId), "Point list switched. Team totals now use it.")}>
+                  Switch
+                </Button>
+              )}
+            </div>
+            {sharedWith.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>Shared with {sharedWith.map((s) => s.name).join(", ")}.</span>
+                <button
+                  disabled={points.isPending}
+                  onClick={() => points.run(() => splitSeasonPointList(season.id), `This season now has its own list: “${season.name} points”.`)}
+                  className="underline hover:text-foreground"
+                >
+                  Give this season its own copy
+                </button>
+              </div>
+            )}
+            <Message flash={points.flash} />
+          </div>
+        )}
+      </Row>
+
+      <Row title="Format" help="Which Pokémon and moves are available. Pokémon Champions also limits the draft to Pokémon in Champions.">
+        <div className="flex flex-wrap gap-2">
+          <select value={format} onChange={(e) => setFormat(e.target.value)} className={`${select} min-w-0 flex-1`}>
+            {FORMAT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
           {format !== (season.format ?? "all") && (
-            <Button onClick={handleSaveFormat} disabled={isPending}>
-              {isPending ? "Saving…" : "Save Format"}
-            </Button>
+            <Button disabled={fmt.isPending} onClick={() => fmt.run(() => updateSeasonFormat(season.id, format), "Format saved.")}>Save</Button>
           )}
-          {formatSaved && <p className="text-xs text-green-400">✓ Format updated</p>}
-          {saveError && <p className="text-xs text-red-400">✗ {saveError}</p>}
         </div>
-      </div>
+        <div className="mt-2"><Message flash={fmt.flash} /></div>
+      </Row>
 
-      {/* Playoffs */}
-      <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
-        <div>
-          <p className="text-sm font-semibold">Playoff Teams</p>
-          <p className="text-xs text-muted-foreground">
-            How many teams make the playoffs. If it isn&apos;t 2, 4, 8 or 16, the top seeds get a first-round bye.
-            Re-seed the bracket on the Schedule page after changing this.
-          </p>
+      <Row title="Roster size" help="Most Pokémon per team. Lowering it removes Pokémon over the limit.">
+        <div className="flex flex-wrap items-center gap-3">
+          <Stepper value={size} min={1} max={20} onChange={setSize} />
+          {size !== oldSize && (
+            <>
+              <Button
+                disabled={roster.isPending}
+                className={shrinking ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
+                onClick={() => {
+                  if (shrinking && !window.confirm(`Every team loses the Pokémon in slots ${size + 1}–${oldSize}. Continue?`)) return;
+                  roster.run(() => updateRosterSize(season.id, size), "Roster size saved.");
+                }}
+              >
+                Save ({size})
+              </Button>
+              <Button variant="secondary" onClick={() => setSize(oldSize)}>Reset</Button>
+            </>
+          )}
         </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <select
-            value={playoffTeams}
-            onChange={e => setPlayoffTeams(e.target.value)}
-            className="rounded-md border bg-background px-3 py-2 text-sm flex-1 min-w-0"
-          >
+        {shrinking && <p className="mt-2 text-xs text-yellow-400">Pokémon in slots {size + 1}–{oldSize} will be removed from every team.</p>}
+        <div className="mt-2"><Message flash={roster.flash} /></div>
+      </Row>
+
+      <Row title="Playoff teams" help="If it isn't 2, 4, 8 or 16, the top seeds get a first-round bye. Re-seed the bracket on the Schedule page after changing this.">
+        <div className="flex flex-wrap gap-2">
+          <select value={playoffTeams} onChange={(e) => setPlayoffTeams(e.target.value)} className={`${select} min-w-0 flex-1`}>
             <option value="all">All teams ({teamCount})</option>
-            {Array.from({ length: Math.max(0, teamCount - 2) }, (_, i) => i + 2).map(n => {
-              let size = 1;
-              while (size < n) size *= 2;
+            {Array.from({ length: Math.max(0, teamCount - 2) }, (_, i) => i + 2).map((n) => {
+              let bracket = 1;
+              while (bracket < n) bracket *= 2;
               return (
                 <option key={n} value={String(n)}>
-                  Top {n}{size !== n ? ` (${size - n} bye${size - n === 1 ? "" : "s"})` : ""}
+                  Top {n}{bracket !== n ? ` (${bracket - n} bye${bracket - n === 1 ? "" : "s"})` : ""}
                 </option>
               );
             })}
           </select>
           {playoffTeams !== (season.playoffTeams ? String(season.playoffTeams) : "all") && (
-            <Button onClick={handleSavePlayoffs} disabled={isPending}>
-              {isPending ? "Saving…" : "Save Playoff Teams"}
+            <Button
+              disabled={playoffs.isPending}
+              onClick={() => playoffs.run(() => updatePlayoffTeams(season.id, playoffTeams === "all" ? null : Number(playoffTeams)), "Playoff size saved.")}
+            >
+              Save
             </Button>
           )}
-          {playoffSaved && <p className="text-xs text-green-400">✓ Playoff size updated</p>}
         </div>
-      </div>
+        <div className="mt-2"><Message flash={playoffs.flash} /></div>
+      </Row>
     </div>
   );
 }
 
-// ─── Main component ────────────────────────────────────────────────────────────
+// ─── Teams tab ────────────────────────────────────────────────────────────────
 
-export function SeasonManagementClient({ seasons, teams }: { seasons: Season[]; teams: Team[] }) {
-  const [isPending, startTransition] = useTransition();
-  const [message,   setMessage]      = useState("");
-  const [confirmDeleteSeason, setConfirmDeleteSeason] = useState<Season | null>(null);
+function TeamsTab({ season, teams }: { season: Season; teams: Team[] }) {
+  const { isPending, flash, run } = useAction();
+  const [toAdd, setToAdd] = useState<string[]>([]);
+  const [toRemove, setToRemove] = useState<string[]>([]);
+  const [newName, setNewName] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const pending = toAdd.length + toRemove.length;
 
-  // New season form
-  const [name,        setName]       = useState("");
-  const [budget,      setBudget]     = useState(105);
-  const [teamCount,   setTeamCount]  = useState(8);
-  const [rosterSize,  setRosterSize] = useState(10);
-  const [newFormat,   setNewFormat]  = useState("all");
-  const [sourceId,    setSourceId]   = useState("");
-  const [copyNames,   setCopyNames]  = useState(true);
-  const [copyCoaches, setCopyCoaches]= useState(false);
-  const [copyRosters, setCopyRosters]= useState(false);
-  const [copyLogos,   setCopyLogos]  = useState(false);
-  const [copyPoints,  setCopyPoints] = useState(true);
-  const [pointsSourceId, setPointsSourceId] = useState("");
+  const queueAdd = () => {
+    if (!newName.trim()) return;
+    setToAdd((p) => [...p, newName.trim()]);
+    setNewName("");
+  };
 
-  // Team management pending changes
-  const [teamsToAdd,    setTeamsToAdd]    = useState<string[]>([]);
-  const [teamsToRemove, setTeamsToRemove] = useState<string[]>([]);
-  const [newTeamName,   setNewTeamName]   = useState("");
-  const [showConfirm,   setShowConfirm]   = useState(false);
-
-  const activeSeason  = seasons.find(s => s.activeSeason);
-  const nonArchived   = seasons.filter(s => !s.archived);
-  const archived      = seasons.filter(s => s.archived);
-  const hasChanges    = teamsToAdd.length > 0 || teamsToRemove.length > 0;
-
-  function flash(msg: string) {
-    setMessage(msg);
-    setTimeout(() => setMessage(""), 3000);
-  }
-
-  function handleCreate() {
-    if (!name.trim()) return;
-    if (teamCount < 4 || teamCount > 12) { flash("Team count must be between 4 and 12"); return; }
+  const apply = () => {
     const fd = new FormData();
-    fd.set("name",           name.trim());
-    fd.set("budget",         String(budget));
-    fd.set("teamCount",      String(teamCount));
-    fd.set("rosterSize",     String(rosterSize));
-    fd.set("format",         newFormat);
-    fd.set("sourceSeasonId", sourceId);
-    fd.set("copyNames",      String(copyNames));
-    fd.set("copyCoaches",    String(copyCoaches));
-    fd.set("copyRosters",    String(copyRosters));
-    fd.set("copyLogos",      String(copyLogos));
-    fd.set("copyPoints",     String(copyPoints));
-    fd.set("pointsSourceId", pointsSourceId);
-    startTransition(async () => {
-      try {
-        { const r = await createNewSeason(fd); if (r.error) throw new Error(r.error); }
-        setName("");
-        flash(`✓ Season created with ${teamCount} teams and auto-generated schedule`);
-      } catch (err) {
-        flash(`✗ ${err instanceof Error ? err.message : "Failed"}`);
-      }
+    fd.set("seasonId", season.id);
+    fd.set("toAdd", JSON.stringify(toAdd));
+    fd.set("toRemove", JSON.stringify(toRemove));
+    run(() => applyTeamChanges(fd), "Teams updated and schedule rebuilt.", () => {
+      setToAdd([]);
+      setToRemove([]);
+      setConfirming(false);
     });
-  }
-
-  function handleSetActive(seasonId: string) {
-    startTransition(async () => {
-      try {
-        { const r = await setActiveSeason(seasonId); if (r.error) throw new Error(r.error); }
-        flash("✓ Active season updated");
-      } catch (err) {
-        flash(`✗ ${err instanceof Error ? err.message : "Failed"}`);
-      }
-    });
-  }
-
-  function handleArchive(seasonId: string) {
-    startTransition(async () => {
-      try {
-        { const r = await archiveSeason(seasonId); if (r.error) throw new Error(r.error); }
-        flash("✓ Archived");
-      } catch (err) {
-        flash(`✗ ${err instanceof Error ? err.message : "Failed"}`);
-      }
-    });
-  }
-
-  function handleDeleteSeason() {
-    if (!confirmDeleteSeason) return;
-    startTransition(async () => {
-      try {
-        { const r = await deleteSeason(confirmDeleteSeason.id); if (r.error) throw new Error(r.error); }
-        setConfirmDeleteSeason(null);
-        flash("✓ Season deleted");
-      } catch (err) {
-        flash(`✗ ${err instanceof Error ? err.message : "Failed"}`);
-      }
-    });
-  }
-
-  function queueAdd() {
-    if (!newTeamName.trim()) return;
-    setTeamsToAdd(prev => [...prev, newTeamName.trim()]);
-    setNewTeamName("");
-  }
-
-  function queueRemove(teamId: string) {
-    setTeamsToRemove(prev => prev.includes(teamId) ? prev.filter(id => id !== teamId) : [...prev, teamId]);
-  }
-
-  function handleConfirmChanges() {
-    if (!activeSeason) return;
-    const fd = new FormData();
-    fd.set("seasonId", activeSeason.id);
-    fd.set("toAdd",    JSON.stringify(teamsToAdd));
-    fd.set("toRemove", JSON.stringify(teamsToRemove));
-    startTransition(async () => {
-      try {
-        { const r = await applyTeamChanges(fd); if (r.error) throw new Error(r.error); }
-        setTeamsToAdd([]);
-        setTeamsToRemove([]);
-        setShowConfirm(false);
-        flash("✓ Changes applied and schedule regenerated");
-      } catch (err) {
-        flash(`✗ ${err instanceof Error ? err.message : "Failed to apply changes"}`);
-      }
-    });
-  }
-
-  function handleRegenerateSchedule() {
-    if (!activeSeason) return;
-    startTransition(async () => {
-      try {
-        { const r = await regenerateSchedule(activeSeason.id); if (r.error) throw new Error(r.error); }
-        flash("✓ Schedule regenerated with new random matchups");
-      } catch (err) {
-        flash(`✗ ${err instanceof Error ? err.message : "Failed"}`);
-      }
-    });
-  }
+  };
 
   return (
-    <div className="space-y-8">
-      {confirmDeleteSeason && (
-        <DeleteWarning
-          label={confirmDeleteSeason.name}
-          items={["All teams and rosters", "All schedule matches and results", "All Pokémon stats records"]}
-          onConfirm={handleDeleteSeason}
-          onCancel={() => setConfirmDeleteSeason(null)}
-          isPending={isPending}
-        />
-      )}
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Adding or removing teams rebuilds this season&apos;s whole schedule when you confirm. Rename teams and coaches on each team&apos;s page.
+      </p>
 
-      {/* Confirm team changes modal */}
-      {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <Card className="w-full max-w-md p-6 space-y-4 border-yellow-500/50">
-            <h2 className="text-xl font-black">Confirm All Changes</h2>
-            <p className="text-sm text-muted-foreground">
-              ⚠️ This will regenerate the entire schedule. All existing match results will be lost.
-            </p>
-            {teamsToAdd.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold text-green-400 mb-1">Adding:</p>
-                {teamsToAdd.map((n, i) => <p key={i} className="text-sm text-muted-foreground pl-3">+ {n}</p>)}
-              </div>
-            )}
-            {teamsToRemove.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold text-red-400 mb-1">Removing:</p>
-                {teamsToRemove.map(id => {
-                  const t = teams.find(t => t.id === id);
-                  return <p key={id} className="text-sm text-muted-foreground pl-3">− {t?.teamName}</p>;
-                })}
-              </div>
-            )}
-            <div className="flex gap-3">
-              <Button variant="secondary" className="flex-1" onClick={() => setShowConfirm(false)} disabled={isPending}>Cancel</Button>
-              <Button className="flex-1" onClick={handleConfirmChanges} disabled={isPending}>
-                {isPending ? "Applying…" : "Confirm & Regenerate Schedule"}
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      <div>
-        <h1 className="text-4xl font-black">Season Management</h1>
-        <p className="mt-1 text-muted-foreground">Create seasons, manage teams, regenerate schedules.</p>
+      <div className="flex gap-2">
+        <Input placeholder="New team name…" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && queueAdd()} />
+        <Button onClick={queueAdd} disabled={!newName.trim()}><Plus size={14} className="mr-1" /> Add</Button>
       </div>
 
-      {/* Create new season */}
-      <Card className="p-5 space-y-4">
-        <h2 className="text-lg font-bold">Create New Season</h2>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Season Name</label>
-            <Input placeholder="e.g. Season 2027" value={name} onChange={e => setName(e.target.value)} />
+      <div className="grid gap-2 sm:grid-cols-2">
+        {toAdd.map((n, i) => (
+          <div key={`add-${i}`} className="flex items-center justify-between rounded-lg border border-green-500/40 bg-green-500/10 px-4 py-3">
+            <span className="font-semibold text-green-300">+ {n}</span>
+            <button onClick={() => setToAdd((p) => p.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-foreground" aria-label="Undo"><X size={16} /></button>
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Draft Budget</label>
-            <Input type="number" value={budget} onChange={e => setBudget(Number(e.target.value))} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Format / Generation</label>
-            <select value={newFormat} onChange={e => setNewFormat(e.target.value)}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm">
-              {FORMAT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Roster Size <span className="text-muted-foreground/60">(per team)</span>
-            </label>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setRosterSize(c => Math.max(1, c - 1))}
-                className="rounded-md border bg-muted px-2 py-2 hover:bg-muted/80"><Minus size={14} /></button>
-              <Input type="number" min={1} max={20} value={rosterSize}
-                onChange={e => setRosterSize(Math.min(20, Math.max(1, Number(e.target.value))))}
-                className="text-center font-bold text-lg" />
-              <button onClick={() => setRosterSize(c => Math.min(20, c + 1))}
-                className="rounded-md border bg-muted px-2 py-2 hover:bg-muted/80"><Plus size={14} /></button>
+        ))}
+        {teams.map((t) => {
+          const removing = toRemove.includes(t.id);
+          return (
+            <div key={t.id} className={`flex items-center justify-between gap-2 rounded-lg border px-4 py-3 ${removing ? "border-red-500/40 bg-red-500/10" : ""}`}>
+              <div className="min-w-0">
+                <Link href={`/teams/${t.id}`} className={`block truncate font-semibold hover:underline ${removing ? "text-muted-foreground line-through" : ""}`}>{t.teamName}</Link>
+                <p className="text-xs text-muted-foreground">{t.coach?.name ?? "No coach"} · {t.wins}W–{t.losses}L</p>
+              </div>
+              <button
+                onClick={() => setToRemove((p) => (p.includes(t.id) ? p.filter((x) => x !== t.id) : [...p, t.id]))}
+                className={`rounded-md p-2 ${removing ? "bg-red-500/20 text-red-400" : "text-muted-foreground hover:bg-red-500/10 hover:text-red-400"}`}
+                aria-label={removing ? "Keep team" : "Remove team"}
+                title={removing ? "Keep team" : "Remove team"}
+              >
+                {removing ? <X size={16} /> : <Trash2 size={16} />}
+              </button>
             </div>
-            <p className="text-xs text-muted-foreground">Each team can draft up to {rosterSize} Pokemon</p>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Number of Teams <span className="text-muted-foreground/60">(4-12)</span>
-            </label>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setTeamCount(c => Math.max(4, c - 1))}
-                className="rounded-md border bg-muted px-2 py-2 hover:bg-muted/80"><Minus size={14} /></button>
-              <Input type="number" min={4} max={12} value={teamCount}
-                onChange={e => setTeamCount(Math.min(12, Math.max(4, Number(e.target.value))))}
-                className="text-center font-bold text-lg" />
-              <button onClick={() => setTeamCount(c => Math.min(12, c + 1))}
-                className="rounded-md border bg-muted px-2 py-2 hover:bg-muted/80"><Plus size={14} /></button>
+          );
+        })}
+      </div>
+
+      {pending > 0 && (
+        <div className="space-y-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-4">
+          {!confirming ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm font-semibold text-yellow-300">
+                {toAdd.length > 0 && `${toAdd.length} to add`}{toAdd.length > 0 && toRemove.length > 0 && " · "}{toRemove.length > 0 && `${toRemove.length} to remove`}
+              </p>
+              <div className="ml-auto flex gap-2">
+                <Button variant="secondary" onClick={() => { setToAdd([]); setToRemove([]); }}>Discard</Button>
+                <Button onClick={() => setConfirming(true)}>Review</Button>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {teamCount % 2 !== 0 ? "Odd count - one team gets a bye each week" : ""}
-              {` ${Math.min(teamCount - 1, 8)} week schedule will be generated`}
-            </p>
+          ) : (
+            <>
+              <p className="text-sm font-semibold">This rebuilds {season.name}&apos;s schedule. Every match result in it is lost.</p>
+              {toRemove.length > 0 && (
+                <p className="text-sm text-red-300">Removing {toRemove.map((id) => teams.find((t) => t.id === id)?.teamName).join(", ")} deletes their roster and stats too.</p>
+              )}
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setConfirming(false)} disabled={isPending}>Back</Button>
+                <Button onClick={apply} disabled={isPending}>{isPending ? "Applying…" : "Confirm and rebuild schedule"}</Button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      <Message flash={flash} />
+    </div>
+  );
+}
+
+// ─── Schedule tab ─────────────────────────────────────────────────────────────
+
+function ScheduleTab({ season }: { season: Season }) {
+  const { isPending, flash, run } = useAction();
+  const [sure, setSure] = useState(false);
+  return (
+    <div className="space-y-4">
+      <Row title="See the schedule" help="Results, replays and the playoff bracket are managed on the Schedule page.">
+        <Link href="/schedule" className="inline-flex items-center gap-1.5 rounded-md border bg-muted px-3 py-2 text-sm font-medium hover:bg-muted/80">
+          Open Schedule <ExternalLink size={13} />
+        </Link>
+      </Row>
+      <Row title="Re-randomize the schedule" help="New random matchups for every week. All match results in this season are lost.">
+        {!sure ? (
+          <Button variant="secondary" onClick={() => setSure(true)}><RefreshCw size={14} className="mr-1" /> Re-randomize…</Button>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-yellow-300">Wipe {season.name}&apos;s results and redraw?</span>
+            <Button
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isPending}
+              onClick={() => run(() => regenerateSchedule(season.id), "Schedule re-randomized.", () => setSure(false))}
+            >
+              {isPending ? "Working…" : "Yes, re-randomize"}
+            </Button>
+            <Button variant="secondary" onClick={() => setSure(false)}>Cancel</Button>
           </div>
+        )}
+        <div className="mt-2"><Message flash={flash} /></div>
+      </Row>
+    </div>
+  );
+}
+
+// ─── Danger zone ──────────────────────────────────────────────────────────────
+
+function DangerTab({ season }: { season: Season }) {
+  const router = useRouter();
+  const { isPending, flash, run } = useAction();
+  const [typed, setTyped] = useState("");
+  return (
+    <div className="space-y-4">
+      <Row
+        title={season.archived ? "Archived" : "Archive"}
+        help={season.archived ? "This season is hidden from the main list." : "Hides the season from the main list. Its teams, results and stats are kept."}
+      >
+        {season.archived ? (
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground"><ArchiveRestore size={14} /> Archived seasons can still be viewed and deleted here.</p>
+        ) : (
+          <Button
+            variant="secondary"
+            disabled={isPending || season.activeSeason}
+            title={season.activeSeason ? "Make another season active first" : undefined}
+            onClick={() => run(() => archiveSeason(season.id), "Archived.")}
+          >
+            <Archive size={14} className="mr-1" /> Archive {season.name}
+          </Button>
+        )}
+        {season.activeSeason && <p className="mt-2 text-xs text-muted-foreground">The active season can&apos;t be archived. Make another season active first.</p>}
+      </Row>
+      <Row title="Delete" help="Permanently deletes the season with all its teams, rosters, matches and stats. Its point list is kept.">
+        <div className="space-y-2">
+          <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={`Type “${season.name}” to confirm`} />
+          <Button
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            disabled={isPending || typed.trim() !== season.name}
+            onClick={() => run(() => deleteSeason(season.id), "Season deleted.", () => router.replace("/settings/seasons"))}
+          >
+            <Trash2 size={14} className="mr-1" /> Delete forever
+          </Button>
+        </div>
+      </Row>
+      <Message flash={flash} />
+    </div>
+  );
+}
+
+// ─── New season ───────────────────────────────────────────────────────────────
+
+function NewSeasonPanel({ seasons, pointLists, onDone }: { seasons: Season[]; pointLists: PointList[]; onDone: () => void }) {
+  const router = useRouter();
+  const { isPending, flash, setFlash, run } = useAction();
+  const active = seasons.find((s) => s.activeSeason);
+
+  const [name, setName] = useState("");
+  const [budget, setBudget] = useState(active?.draftBudget ?? 105);
+  const [teamCount, setTeamCount] = useState(8);
+  const [rosterSize, setRosterSize] = useState(active?.rosterSize ?? 10);
+  const [format, setFormat] = useState(active?.format ?? "all");
+  const [sourceId, setSourceId] = useState("");
+  const [copyNames, setCopyNames] = useState(true);
+  const [copyCoaches, setCopyCoaches] = useState(true);
+  const [copyRosters, setCopyRosters] = useState(false);
+  const [copyLogos, setCopyLogos] = useState(true);
+  const [listId, setListId] = useState(
+    pointLists.find((l) => l.name.toLowerCase() === "default")?.id ?? active?.pointListId ?? pointLists[0]?.id ?? "",
+  );
+  const [ownList, setOwnList] = useState(false);
+
+  const create = () => {
+    if (!name.trim()) return setFlash({ text: "Give the season a name.", tone: "error" });
+    const fd = new FormData();
+    fd.set("name", name.trim());
+    fd.set("budget", String(budget));
+    fd.set("teamCount", String(teamCount));
+    fd.set("rosterSize", String(rosterSize));
+    fd.set("format", format);
+    fd.set("sourceSeasonId", sourceId);
+    fd.set("copyNames", String(copyNames));
+    fd.set("copyCoaches", String(copyCoaches));
+    fd.set("copyRosters", String(copyRosters));
+    fd.set("copyLogos", String(copyLogos));
+    fd.set("pointListId", listId);
+    fd.set("ownPointList", String(ownList));
+    run(() => createNewSeason(fd), `Created ${name.trim()}.`, () => {
+      onDone();
+      router.replace("/settings/seasons");
+    });
+  };
+
+  return (
+    <Card className="space-y-5 border-primary/40 p-5">
+      <h2 className="text-lg font-bold">New season</h2>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-1">
+          <span className={label}>Name</span>
+          <Input autoFocus placeholder="e.g. Season 27/28" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <span className={label}>Format</span>
+          <select value={format} onChange={(e) => setFormat(e.target.value)} className={select}>
+            {FORMAT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <span className={label}>Draft budget</span>
+          <Input type="number" value={budget} onChange={(e) => setBudget(Number(e.target.value))} />
+        </div>
+        <div className="space-y-1">
+          <span className={label}>Teams (4–12)</span>
+          <Stepper value={teamCount} min={4} max={12} onChange={setTeamCount} />
+          <p className="text-xs text-muted-foreground">
+            {Math.min(teamCount - 1, 8)}-week schedule{teamCount % 2 ? ", one bye each week" : ""}
+          </p>
+        </div>
+        <div className="space-y-1">
+          <span className={label}>Roster size</span>
+          <Stepper value={rosterSize} min={1} max={20} onChange={setRosterSize} />
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+          <div className="space-y-1">
+            <span className={label}>Points</span>
+            {pointLists.length === 0 ? (
+              <p className="text-sm text-yellow-400">Run supabase/point-lists.sql in Supabase to set up point lists.</p>
+            ) : (
+              <select value={listId} onChange={(e) => setListId(e.target.value)} className={select}>
+                {pointLists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            )}
+          </div>
+          <Toggle label="Give this season its own copy of the list" checked={ownList} onChange={setOwnList} />
+          <p className="text-xs text-muted-foreground">
+            {ownList
+              ? `Creates “${name.trim() || "Season"} points”, a copy you can change without affecting other seasons.`
+              : "The season shares the list: edits to it change every season using it."}
+          </p>
         </div>
 
-        {/* Copy from season */}
-        <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+        <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Copy From Season (optional)</label>
-            <select value={sourceId} onChange={e => setSourceId(e.target.value)}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm">
-              <option value="">— Start completely blank —</option>
-              {seasons.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            <span className={label}>Copy teams from</span>
+            <select value={sourceId} onChange={(e) => setSourceId(e.target.value)} className={select}>
+              <option value="">— Start with blank “Team 1, Team 2…” —</option>
+              {seasons.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
           {sourceId && (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <Toggle label="Team Names"   checked={copyNames}   onChange={setCopyNames}   />
-              <Toggle label="Coaches"      checked={copyCoaches} onChange={setCopyCoaches} />
-              <Toggle label="Rosters"      checked={copyRosters} onChange={setCopyRosters} />
-              <Toggle label="Logos/Images" checked={copyLogos}   onChange={setCopyLogos}   />
+            <div className="grid grid-cols-2 gap-2">
+              <Toggle label="Team names" checked={copyNames} onChange={setCopyNames} />
+              <Toggle label="Coaches" checked={copyCoaches} onChange={setCopyCoaches} />
+              <Toggle label="Logos" checked={copyLogos} onChange={setCopyLogos} />
+              <Toggle label="Rosters" checked={copyRosters} onChange={setCopyRosters} />
             </div>
           )}
-
-          {/* Points source */}
-          <div className="space-y-2 border-t pt-3 mt-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold">Point System</p>
-                <p className="text-xs text-muted-foreground">Copy point values from a previous season or use current global values</p>
-              </div>
-              <Toggle label="Copy Points" checked={copyPoints} onChange={setCopyPoints} />
-            </div>
-            {copyPoints && (
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Copy Points From</label>
-                <select value={pointsSourceId} onChange={e => setPointsSourceId(e.target.value)}
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm">
-                  <option value="">— Use current global values —</option>
-                  {seasons.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-                <p className="text-xs text-muted-foreground">
-                  {pointsSourceId
-                    ? `Will copy all point values from ${seasons.find(s => s.id === pointsSourceId)?.name}`
-                    : "Will seed from current global Pokémon point values"}
-                </p>
-              </div>
-            )}
-          </div>
         </div>
+      </div>
 
-        <div className="flex items-center gap-3">
-          <Button onClick={handleCreate} disabled={isPending || !name.trim()}>
-            {isPending ? "Creating…" : "Create Season & Generate Schedule"}
-          </Button>
-          {message && <p className="text-sm text-muted-foreground">{message}</p>}
-        </div>
-      </Card>
-
-      {/* Team management for active season */}
-      {activeSeason && (
-        <Card className="p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold">Team Management — {activeSeason.name}</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Adding or removing teams will regenerate the full schedule when you confirm.
-              </p>
-            </div>
-            <button onClick={handleRegenerateSchedule} disabled={isPending}
-              className="flex items-center gap-1.5 rounded-md border bg-muted px-3 py-2 text-xs font-medium hover:bg-muted/80 transition-colors"
-              title="Regenerate schedule with new random matchups">
-              <RefreshCw size={13} /> Re-randomize Schedule
-            </button>
-          </div>
-
-          {/* Season settings (roster size + format) */}
-          <SeasonSettingsEditor season={activeSeason} teamCount={teams.filter(t => t.seasonId === activeSeason.id).length} />
-
-          {/* Add team */}
-          <div className="flex gap-3">
-            <Input placeholder="New team name…" value={newTeamName}
-              onChange={e => setNewTeamName(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && queueAdd()}
-              className="flex-1" />
-            <Button onClick={queueAdd} disabled={!newTeamName.trim()}>
-              <Plus size={14} className="mr-1" /> Queue Add
-            </Button>
-          </div>
-
-          {/* Queued additions */}
-          {teamsToAdd.length > 0 && (
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-green-400 uppercase tracking-wider">Queued to Add:</p>
-              {teamsToAdd.map((n, i) => (
-                <div key={i} className="flex items-center justify-between rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm">
-                  <span>+ {n}</span>
-                  <button onClick={() => setTeamsToAdd(prev => prev.filter((_, j) => j !== i))}
-                    className="text-muted-foreground hover:text-destructive">✕</button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Existing teams */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Current Teams</p>
-            {teams.map(team => {
-              const markedForRemoval = teamsToRemove.includes(team.id);
-              return (
-                <div key={team.id}
-                  className={`flex items-center justify-between rounded-lg border px-4 py-3 transition-colors ${markedForRemoval ? "border-red-500/40 bg-red-500/10" : ""}`}>
-                  <div>
-                    <p className={`font-semibold ${markedForRemoval ? "line-through text-muted-foreground" : ""}`}>{team.teamName}</p>
-                    <p className="text-xs text-muted-foreground">{team.coach?.name ?? "Unassigned"} · {team.wins}W–{team.losses}L</p>
-                  </div>
-                  <button onClick={() => queueRemove(team.id)}
-                    className={`rounded-md p-2 transition-colors ${markedForRemoval ? "text-red-400 bg-red-500/20 hover:bg-red-500/30" : "text-muted-foreground hover:bg-destructive/10 hover:text-destructive"}`}>
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Confirm button */}
-          {hasChanges && (
-            <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-4 space-y-3">
-              <p className="text-sm font-semibold text-yellow-400">
-                You have {teamsToAdd.length > 0 ? `${teamsToAdd.length} addition(s)` : ""}
-                {teamsToAdd.length > 0 && teamsToRemove.length > 0 ? " and " : ""}
-                {teamsToRemove.length > 0 ? `${teamsToRemove.length} removal(s)` : ""} pending.
-              </p>
-              <div className="flex gap-3">
-                <Button variant="secondary" onClick={() => { setTeamsToAdd([]); setTeamsToRemove([]); }}>
-                  Discard All Changes
-                </Button>
-                <Button onClick={() => setShowConfirm(true)}>
-                  Review & Confirm All Changes
-                </Button>
-              </div>
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* Seasons list */}
-      <Card className="p-4 space-y-3">
-        <h2 className="text-lg font-bold">All Seasons</h2>
-        {nonArchived.map(s => (
-          <div key={s.id} className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 ${s.activeSeason ? "border-primary bg-primary/5" : ""}`}>
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="font-semibold">{s.name}</p>
-                {s.activeSeason && <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">ACTIVE</span>}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Budget: {s.draftBudget} pts
-                {s.format && s.format !== "all" && (
-                  <> · {FORMAT_OPTIONS.find(f => f.value === s.format)?.label ?? s.format}</>
-                )}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              {!s.activeSeason && (
-                <Button variant="secondary" onClick={() => handleSetActive(s.id)} disabled={isPending}>
-                  <Star size={14} className="mr-1" /> Set Active
-                </Button>
-              )}
-              <Button variant="secondary" onClick={() => handleArchive(s.id)} disabled={isPending || s.activeSeason}>
-                <Archive size={14} className="mr-1" /> Archive
-              </Button>
-              <button onClick={() => setConfirmDeleteSeason(s)}
-                className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
-                <Trash2 size={18} />
-              </button>
-            </div>
-          </div>
-        ))}
-        {archived.length > 0 && (
-          <>
-            <p className="text-sm font-semibold text-muted-foreground mt-4">Archived</p>
-            {archived.map(s => (
-              <div key={s.id} className="flex items-center justify-between rounded-lg border bg-muted/20 px-4 py-3 opacity-60">
-                <p className="font-semibold text-muted-foreground">{s.name}</p>
-                <button onClick={() => setConfirmDeleteSeason(s)}
-                  className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
-                  <Trash2 size={18} />
-                </button>
-              </div>
-            ))}
-          </>
-        )}
-      </Card>
-    </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={create} disabled={isPending || !name.trim()}>{isPending ? "Creating…" : "Create season and schedule"}</Button>
+        <Message flash={flash} />
+      </div>
+    </Card>
   );
 }
