@@ -1,11 +1,11 @@
 "use client";
 
-import Image from "next/image";
-import { useMemo, useState, useEffect, useTransition } from "react";
+import { useMemo, useState, useEffect, useRef, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, X, LayoutList, LayoutGrid, ChevronUp, ChevronDown, Share2, Download, Trash2, Bookmark, Swords, Sparkles, SlidersHorizontal } from "lucide-react";
 import { savePlan } from "@/lib/plan-actions";
+import { PokemonSprite } from "@/components/pokemon-sprite";
 import { TypeBadge } from "@/components/type-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,6 +20,8 @@ type ViewMode = "list" | "tier";
 type SortKey = "pointValue" | "bst" | "hp" | "attack" | "defense" | "specialAttack" | "specialDefense" | "speed" | "dexNumber" | "name";
 type SortDir = "asc" | "desc";
 type PageSize = 25 | 50 | 100 | "ALL";
+
+const TIER_STEP = 60;
 
 export interface BuilderSlot {
   pokemon: Pokemon;
@@ -88,7 +90,7 @@ function TierCell({ mon, inBuilder, onToggle }: {
       }`}
       title={inBuilder ? `Remove ${mon.name}` : `Add ${mon.name}`}
     >
-      <Image src={mon.spriteUrl} alt={mon.name} width={56} height={56} className="size-12 object-contain" />
+      <PokemonSprite src={mon.spriteUrl} name={mon.name} size={48} stillOnTouch className="size-12" />
       <p className="text-xs font-semibold leading-tight">{mon.name}</p>
       <div className="flex flex-wrap justify-center gap-0.5">
         {types.map((t) => <TypeBadge key={t} type={t} />)}
@@ -230,7 +232,7 @@ export function SpeedTiers({ slots }: { slots: BuilderSlot[] }) {
       {sorted.map((mon, i) => (
         <div key={mon.id} className="flex items-center gap-2 text-xs">
           <span className="w-4 text-muted-foreground">{i + 1}</span>
-          <Image src={mon.spriteUrl} alt={mon.name} width={20} height={20} className="size-4 object-contain" />
+          <PokemonSprite src={mon.spriteUrl} name={mon.name} size={16} stillOnTouch className="size-4" />
           <span className="w-20 truncate font-medium">{mon.name}</span>
           <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
             <div className="h-full rounded-full bg-yellow-400"
@@ -586,7 +588,7 @@ function TeamBuilder({
             {slots.map(({ pokemon: mon, note }) => (
               <div key={mon.id} className="rounded-lg border bg-muted/30 p-2 space-y-1.5">
                 <div className="flex items-center gap-1.5">
-                  <Image src={mon.spriteUrl} alt={mon.name} width={32} height={32} className="size-7 object-contain shrink-0" />
+                  <PokemonSprite src={mon.spriteUrl} name={mon.name} size={28} stillOnTouch className="size-7 shrink-0" />
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold truncate">{mon.name}</p>
                     <div className="flex items-center gap-1 flex-wrap">
@@ -811,8 +813,10 @@ export function DraftWorkspace({
   // ── Filters ──
   const [query,   setQuery]   = useState("");
   const [types,   setTypes]   = useState<PokemonType[]>([]);
-  const [minPts,  setMinPts]  = useState("");
-  const [maxPts,  setMaxPts]  = useState("");
+  // Point values to show (nothing shows until one is picked, or a name is searched)
+  const [pts,       setPts]       = useState<Set<number>>(new Set());
+  const [rangeMode, setRangeMode] = useState(false);
+  const [anchor,    setAnchor]    = useState<number | null>(null);
 
   // ── Sort ──
   const [sortKey, setSortKey] = useState<SortKey>("dexNumber");
@@ -824,10 +828,29 @@ export function DraftWorkspace({
 
   // ── View ──
   const [view, setView] = useState<ViewMode>("list");
+  // Tier view draws this many Pokémon, then "Show more"
+  const [tierLimit, setTierLimit] = useState(TIER_STEP);
   // Phone-only UI state
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  // Sticky offsets: the site header's height changes with screen width, the team bar only shows below desktop width
+  const barRef = useRef<HTMLDivElement>(null);
+  const [headerH, setHeaderH] = useState(0);
+  const [barH, setBarH] = useState(0);
+  useEffect(() => {
+    const header = document.querySelector("header");
+    const measure = () => {
+      setHeaderH(header ? Math.round(header.getBoundingClientRect().height) : 0);
+      setBarH(barRef.current ? barRef.current.offsetHeight : 0);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (header) ro.observe(header);
+    if (barRef.current) ro.observe(barRef.current);
+    window.addEventListener("resize", measure);
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, []);
 
   // ── Builder state ──
   const [slots, setSlots] = useState<BuilderSlot[]>([]);
@@ -906,46 +929,89 @@ export function DraftWorkspace({
   }
 
   // ── Filtered + sorted ──
-  const filtered = useMemo(() => {
+  // Everything the other filters allow, before the point values are applied
+  const pool = useMemo(() => {
     const q = query.toLowerCase();
-    const min = minPts === "" ? 0 : parseInt(minPts);
-    const max = maxPts === "" ? Infinity : parseInt(maxPts);
     const aq = abilityQuery.trim().toLowerCase();
     return legal.filter(m => {
       if (!m.name.toLowerCase().includes(q)) return false;
       if (aq && !(abilitiesById[m.id] ?? []).some(a => a.toLowerCase().includes(aq))) return false;
       if (selectedMoves.length > 0 && moveMatches && !moveMatches.has(m.id)) return false;
-      if (m.pointValue < min || m.pointValue > max) return false;
       if (types.length > 0 && !types.every(t => pokemonTypesFor(m).includes(t))) return false;
       return true;
-    }).sort((a, b) => {
-      const diff = sortKey === "name" ? a.name.localeCompare(b.name) : (a[sortKey] as number) - (b[sortKey] as number);
-      return sortDir === "asc" ? diff : -diff;
     });
-  }, [legal, query, types, minPts, maxPts, sortKey, sortDir, abilityQuery, abilitiesById, selectedMoves, moveMatches]);
+  }, [legal, query, types, abilityQuery, abilitiesById, selectedMoves, moveMatches]);
+
+  const chipCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const m of legal) counts.set(m.pointValue, 0);
+    for (const m of pool) counts.set(m.pointValue, (counts.get(m.pointValue) ?? 0) + 1);
+    return [...counts.entries()].sort((a, b) => b[0] - a[0]);
+  }, [legal, pool]);
+
+  const searching = query.trim().length > 0;
+  const showing = pts.size > 0 || searching;
+
+  const filtered = useMemo(() => {
+    if (!showing) return [];
+    return pool
+      .filter(m => pts.size === 0 || pts.has(m.pointValue))
+      .sort((a, b) => {
+        const diff = sortKey === "name" ? a.name.localeCompare(b.name) : (a[sortKey] as number) - (b[sortKey] as number);
+        return sortDir === "asc" ? diff : -diff;
+      });
+  }, [pool, pts, showing, sortKey, sortDir]);
+
+  // New selection or filters: start the tier view from the top again
+  useEffect(() => { setTierLimit(TIER_STEP); }, [pts, query, types, abilityQuery, selectedMoves]);
+
+  function pickPoints(v: number) {
+    setPage(1);
+    if (!rangeMode) {
+      setPts(prev => {
+        const next = new Set(prev);
+        if (next.has(v)) next.delete(v); else next.add(v);
+        return next;
+      });
+      return;
+    }
+    // Range: first tap starts it, second tap fills in everything between
+    if (anchor === null) {
+      setPts(new Set([v]));
+      setAnchor(v);
+    } else {
+      const lo = Math.min(anchor, v), hi = Math.max(anchor, v);
+      setPts(new Set(chipCounts.map(([x]) => x).filter(x => x >= lo && x <= hi)));
+      setAnchor(null);
+    }
+  }
 
   const PAGE_SIZES: PageSize[] = [25, 50, 100, "ALL"];
   const totalPages = pageSize === "ALL" ? 1 : Math.ceil(filtered.length / (pageSize as number));
   const paginated  = pageSize === "ALL" ? filtered : filtered.slice((page - 1) * (pageSize as number), page * (pageSize as number));
 
   // ── Tier groups ──
+  const tierSorted = useMemo(
+    () => [...filtered].sort((a, b) => b.pointValue - a.pointValue || a.name.localeCompare(b.name)),
+    [filtered],
+  );
   const tierGroups = useMemo(() => {
     const byPts = new Map<number, Pokemon[]>();
-    [...filtered].sort((a, b) => a.name.localeCompare(b.name)).forEach(m => {
+    tierSorted.slice(0, tierLimit).forEach(m => {
       const arr = byPts.get(m.pointValue) ?? [];
       arr.push(m);
       byPts.set(m.pointValue, arr);
     });
     return [...byPts.entries()].sort((a, b) => b[0] - a[0]);
-  }, [filtered]);
+  }, [tierSorted, tierLimit]);
 
   // ── Filter bar ──
   // Phones: only the name search shows until "Filters" is tapped (max-md:* = under 768px only)
-  const activeFilters = [minPts, maxPts, abilityQuery].filter(Boolean).length + selectedMoves.length + types.length;
+  const activeFilters = [abilityQuery].filter(Boolean).length + selectedMoves.length + types.length;
   const phoneHidden = filtersOpen ? "" : "max-md:hidden";
   const filterBar = (
     <div className="space-y-3 rounded-lg border bg-card p-4 max-md:p-3">
-      <div className="grid gap-3 sm:grid-cols-[1fr_110px_110px] max-md:grid-cols-6">
+      <div className="grid gap-3 max-md:grid-cols-6">
         <label className="relative max-md:col-span-4">
           <Search className="absolute left-3 top-2.5 text-muted-foreground" size={16} />
           <Input className="pl-9" value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} placeholder="Search by name" />
@@ -956,8 +1022,45 @@ export function DraftWorkspace({
         >
           <SlidersHorizontal size={14} /> Filters{activeFilters ? ` (${activeFilters})` : ""}
         </button>
-        <Input type="number" placeholder="Min pts" value={minPts} onChange={e => { setMinPts(e.target.value); setPage(1); }} className={`max-md:col-span-3 ${phoneHidden}`} />
-        <Input type="number" placeholder="Max pts" value={maxPts} onChange={e => { setMaxPts(e.target.value); setPage(1); }} className={`max-md:col-span-3 ${phoneHidden}`} />
+      </div>
+
+      {/* Point values (always visible, also on phones) */}
+      <div className="space-y-1.5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Point values</p>
+          <button
+            onClick={() => { setRangeMode(r => !r); setAnchor(null); }}
+            className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors ${rangeMode ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+            title="Tap two values to pick everything between them"
+          >
+            Range {rangeMode ? "on" : "off"}
+          </button>
+          <button onClick={() => { setPts(new Set(chipCounts.map(([v]) => v))); setAnchor(null); setPage(1); }} className="text-xs text-muted-foreground underline hover:text-foreground">All</button>
+          {pts.size > 0 && (
+            <button onClick={() => { setPts(new Set()); setAnchor(null); setPage(1); }} className="text-xs text-muted-foreground underline hover:text-foreground">Clear</button>
+          )}
+          {rangeMode && (
+            <span className="text-xs text-primary">{anchor === null ? "Tap the first value" : `From ${anchor}: tap the last value`}</span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {chipCounts.map(([v, n]) => {
+            const on = pts.has(v);
+            return (
+              <button
+                key={v}
+                onClick={() => pickPoints(v)}
+                disabled={n === 0 && !on}
+                className={`min-w-[2.75rem] rounded-lg border px-1.5 py-1 text-center transition-colors disabled:opacity-35 ${
+                  on ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"
+                } ${anchor === v ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
+              >
+                <span className="block text-base font-black leading-tight max-md:text-sm">{v}</span>
+                <span className={`block text-[10px] ${on ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{n}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Moves + abilities */}
@@ -1070,14 +1173,43 @@ export function DraftWorkspace({
       )}
       {view === "tier" && (
         <div className="flex items-center justify-between border-t pt-2 text-xs text-muted-foreground">
-          <p>{filtered.length} Pokémon across {tierGroups.length} tiers · alphabetical within tier</p>
+          <p>{filtered.length} Pokémon · alphabetical within each tier</p>
         </div>
       )}
     </div>
   );
 
+  const pointsUsed = slots.reduce((n, s) => n + s.pokemon.pointValue, 0);
+  const pickPrompt = (
+    <Card className="p-10 text-center text-muted-foreground max-md:p-6">
+      <p className="font-semibold text-foreground">Pick one or more point values above to see Pokémon.</p>
+      <p className="mt-1 text-sm">Turn on Range to pick everything between two values, or search by name.</p>
+    </Card>
+  );
+
   return (
-    <div className="grid gap-6 xl:grid-cols-[2fr_1fr_1fr] max-md:gap-4 max-md:pb-24">
+    <div className="space-y-4 xl:space-y-0">
+      {/* ── Phones + tablets: team bar frozen at the top, opens the Team Builder ── */}
+      <div ref={barRef} className="sticky z-20 -mx-1 bg-background/90 px-1 py-1.5 backdrop-blur xl:hidden" style={{ top: headerH }}>
+        <button
+          onClick={() => setSheetOpen(true)}
+          className="flex w-full items-center gap-3 rounded-xl border border-primary/40 bg-card px-4 py-2.5 text-left shadow-lg"
+        >
+          <div className="min-w-0 shrink-0">
+            <p className="text-sm font-black">My team · {slots.length}</p>
+            <p className={`text-xs ${pointsUsed > budget ? "text-red-400" : "text-muted-foreground"}`}>{pointsUsed} / {budget} pts</p>
+          </div>
+          <div className="flex min-w-0 flex-1 justify-end -space-x-1.5 overflow-hidden">
+            {slots.map(s => (
+              <PokemonSprite key={s.pokemon.id} src={s.pokemon.spriteUrl} name={s.pokemon.name} size={32} stillOnTouch className="size-8 shrink-0 rounded-full bg-muted ring-2 ring-card" />
+            ))}
+            {slots.length === 0 && <span className="text-xs text-muted-foreground">Tap Pokémon to add them</span>}
+          </div>
+          <ChevronDown size={18} className="shrink-0 text-muted-foreground" />
+        </button>
+      </div>
+
+    <div className="grid gap-6 xl:grid-cols-[2fr_1fr_1fr] max-md:gap-4">
       <section className="space-y-4 xl:col-span-1">        {/* View toggle */}
         <div className="flex items-center gap-2">
           <button onClick={() => setView("list")}
@@ -1092,8 +1224,13 @@ export function DraftWorkspace({
 
         {filterBar}
 
+        {!showing && pickPrompt}
+        {showing && filtered.length === 0 && (
+          <Card className="p-10 text-center text-muted-foreground">No Pokémon match these filters.</Card>
+        )}
+
         {/* ── LIST VIEW ── */}
-        {view === "list" && (
+        {view === "list" && showing && (
           <>
             <div className="space-y-3">
               {paginated.map(mon => {
@@ -1107,7 +1244,7 @@ export function DraftWorkspace({
                       "opacity-50 cursor-not-allowed"
                     }`}>
                     <div className="flex items-center gap-4 max-md:gap-2.5">
-                      <Image src={mon.spriteUrl} alt={mon.name} width={128} height={128} className="size-28 shrink-0 object-contain max-md:size-14" />
+                      <PokemonSprite src={mon.spriteUrl} name={mon.name} size={112} stillOnTouch className="size-28 shrink-0 max-md:size-14" />
                       <div className="min-w-0 flex-1 space-y-2 max-md:space-y-1">
                         <div className="flex flex-wrap items-center gap-2 max-md:gap-1.5">
                           <span className="text-xs text-muted-foreground font-mono max-md:hidden">#{String(mon.dexNumber).padStart(4, "0")}</span>
@@ -1158,14 +1295,14 @@ export function DraftWorkspace({
         )}
 
         {/* ── TIER VIEW ── */}
-        {view === "tier" && (
+        {view === "tier" && showing && (
           <div className="space-y-0">
-            {tierGroups.map(([pts, mons]) => (
-              <div key={pts}>
-                <div className="sticky top-[90px] max-md:top-[56px] z-20 flex items-center gap-3 border-b border-t bg-background/95 backdrop-blur px-2 py-2">
-                  <span className="text-2xl font-black">{pts}</span>
+            {tierGroups.map(([pts_, mons]) => (
+              <div key={pts_}>
+                <div className="sticky z-10 flex items-center gap-3 border-b border-t bg-background/95 backdrop-blur px-2 py-2" style={{ top: headerH + barH }}>
+                  <span className="text-2xl font-black">{pts_}</span>
                   <span className="text-sm font-semibold text-muted-foreground">pts</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{mons.length} Pokémon</span>
+                  <span className="ml-auto text-xs text-muted-foreground">{filtered.filter(m => m.pointValue === pts_).length} Pokémon</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 py-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                   {mons.map(mon => (
@@ -1176,12 +1313,20 @@ export function DraftWorkspace({
                 </div>
               </div>
             ))}
+            {tierSorted.length > tierLimit && (
+              <div className="flex flex-col items-center gap-1 py-4">
+                <Button variant="secondary" onClick={() => setTierLimit(n => n + TIER_STEP)}>
+                  Show {Math.min(TIER_STEP, tierSorted.length - tierLimit)} more
+                </Button>
+                <p className="text-xs text-muted-foreground">Showing {tierLimit} of {tierSorted.length}</p>
+              </div>
+            )}
           </div>
         )}
       </section>
 
       {/* ── TEAM BUILDER — right side, spans 2 cols, sticky ── */}
-      <aside className="xl:col-span-2 max-md:hidden">
+      <aside className="xl:col-span-2 max-xl:hidden">
         <div className="sticky top-[100px]">
           <TeamBuilder
             slots={slots}
@@ -1199,26 +1344,10 @@ export function DraftWorkspace({
         </div>
       </aside>
 
-      {/* ── Phones: team bar pinned to the bottom, opens the Team Builder ── */}
-      <button
-        onClick={() => setSheetOpen(true)}
-        className="fixed inset-x-3 bottom-3 z-40 flex items-center gap-3 rounded-xl border border-primary/40 bg-card/95 px-4 py-3 text-left shadow-2xl backdrop-blur md:hidden"
-      >
-        <div className="flex -space-x-2">
-          {slots.slice(0, 4).map(s => (
-            <Image key={s.pokemon.id} src={s.pokemon.spriteUrl} alt="" width={32} height={32} className="size-8 rounded-full bg-muted object-contain ring-2 ring-card" />
-          ))}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-black">My team · {slots.length} Pokémon</p>
-          <p className={`text-xs ${slots.reduce((n, s) => n + s.pokemon.pointValue, 0) > budget ? "text-red-400" : "text-muted-foreground"}`}>
-            {slots.reduce((n, s) => n + s.pokemon.pointValue, 0)} / {budget} pts{planContext?.canSave ? " · tap to save a plan" : ""}
-          </p>
-        </div>
-        <ChevronUp size={18} className="text-muted-foreground" />
-      </button>
+    </div>
+
       {sheetOpen && (
-        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-50 xl:hidden" role="dialog" aria-modal="true">
           <button className="absolute inset-0 bg-black/60" onClick={() => setSheetOpen(false)} aria-label="Close team" />
           <div className="absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-y-auto rounded-t-2xl border-t bg-background p-3 pb-8 shadow-2xl">
             <div className="sticky top-0 z-10 -mx-3 -mt-3 mb-2 flex items-center justify-between bg-background/95 px-4 py-3 backdrop-blur">

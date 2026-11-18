@@ -52,7 +52,7 @@ export function PointsCard({
         changed ? "border-amber-400/70 bg-amber-400/5 ring-1 ring-amber-400/40" : ""
       } ${banned ? "opacity-70" : ""}`}
     >
-      <PokemonSprite src={mon.spriteUrl} name={mon.name} size={88} className="shrink-0 self-center max-md:!size-16" />
+      <PokemonSprite src={mon.spriteUrl} name={mon.name} size={88} stillOnTouch className="size-[88px] shrink-0 self-center max-md:size-16" />
 
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

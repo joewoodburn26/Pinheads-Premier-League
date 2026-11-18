@@ -412,7 +412,7 @@ export function PointsClient({
                           key={p.id}
                           className={`flex items-center gap-2 rounded-lg border p-2 ${changed ? "border-amber-400/70 bg-amber-400/5" : ""}`}
                         >
-                          <PokemonSprite src={p.spriteUrl} name={p.name} size={48} className="shrink-0" />
+                          <PokemonSprite src={p.spriteUrl} name={p.name} size={48} stillOnTouch className="shrink-0" />
                           <div className="min-w-0 flex-1">
                             <p className={`truncate text-sm font-semibold ${e.banned ? "" : "text-green-400"}`}>{p.name}</p>
                             <p className="text-[11px] text-muted-foreground">{e.points} pts</p>
