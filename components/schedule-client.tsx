@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { CalendarDays, Moon, Swords, Trophy } from "lucide-react";
+import { CalendarDays, Moon, Pencil, Swords, Trophy } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { PlayoffBracketBuilder } from "@/components/playoff-bracket-builder";
 import { MatchCard, type TeamVisual } from "@/components/schedule/match-card";
+import { ScheduleEditor } from "@/components/schedule/schedule-editor";
 import { computeStandings, type StandingRow } from "@/components/schedule/standings";
 import type { PlayoffMatch } from "@/lib/playoff-actions";
 import type { ScheduleMatch, Team } from "@/lib/types";
@@ -115,7 +116,7 @@ function WeekStrip({ weeks, active, onPick, matches }: {
 
 export function ScheduleClient({
   matches, teams, initialWeek, playoffMatches, seasonId, visuals, myTeamId, subtitle, playoffTeams,
-  canReport = false, canSetupBracket = false,
+  canReport = false, canSetupBracket = false, canEditSchedule = false,
 }: {
   matches: ScheduleMatch[];
   teams: Team[];
@@ -132,6 +133,8 @@ export function ScheduleClient({
   canReport?: boolean;
   /** Admins and the owner can arrange the playoff bracket */
   canSetupBracket?: boolean;
+  /** Admins and the owner can edit the regular-season schedule */
+  canEditSchedule?: boolean;
 }) {
   const weeks = useMemo(() => [...new Set(matches.map((m) => m.week))].sort((a, b) => a - b), [matches]);
   // Open on the first week that still has matches to play
@@ -139,6 +142,7 @@ export function ScheduleClient({
     weeks.find((w) => matches.some((m) => m.week === w && !m.isBye && !m.winner)) ?? weeks[weeks.length - 1] ?? 1;
   const [tab, setTab] = useState<"matches" | "standings" | "playoffs">("matches");
   const [week, setWeek] = useState(initialWeek && weeks.includes(initialWeek) ? initialWeek : currentWeek);
+  const [editing, setEditing] = useState(false);
 
   const standings = useMemo(() => computeStandings(teams, matches), [teams, matches]);
   const visual = (id: string): TeamVisual =>
@@ -180,7 +184,11 @@ export function ScheduleClient({
         </div>
       </div>
 
-      {tab === "matches" && (
+      {tab === "matches" && editing && (
+        <ScheduleEditor matches={matches} teams={teams} seasonId={seasonId} startWeek={week} onClose={() => setEditing(false)} />
+      )}
+
+      {tab === "matches" && !editing && (
         <div className="space-y-5">
           <WeekStrip weeks={weeks} active={week} onPick={setWeek} matches={matches} />
 
@@ -191,6 +199,14 @@ export function ScheduleClient({
             </span>
             {games.length > 0 && done === games.length && (
               <span className="rounded-full border border-green-500/40 bg-green-500/10 px-3 py-0.5 text-xs font-bold text-green-400">Week complete</span>
+            )}
+            {canEditSchedule && (
+              <button
+                onClick={() => setEditing(true)}
+                className="ml-auto flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <Pencil size={14} /> Edit schedule
+              </button>
             )}
           </div>
 

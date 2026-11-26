@@ -59,6 +59,7 @@ export default async function SchedulePage({
       playoffTeams={season.playoffTeams}
       canReport={canReport(user)}
       canSetupBracket={canReport(user) && isAdmin(user)}
+      canEditSchedule={canReport(user) && isAdmin(user)}
     />
   );
 }
